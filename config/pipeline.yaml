@@ -1,0 +1,32 @@
+# Pipeline hygiene thresholds for the daily digest (Epic 1).
+#
+# Starting defaults — tune these after a week of real digests, per the Epic-1
+# acceptance criterion in docs/PLAN.md ("no false 'stale' flags"). Stage IDs
+# and names are the 13 documented in docs/CONTEXT.md §2 (also fetched live
+# each run via GET /disposition_stages, which is the source of truth).
+
+stage_sla_days:
+  lead-new: 3                                            # New lead
+  lead-reached-out: 5                                    # Reached out
+  lead-responded: 3                                      # Responded
+  applicant-new: 3                                       # New applicant
+  011016a8-16d0-44f4-b95e-1af10019606f: 5                # AI Screened
+  428c0bf5-a68a-4b3b-a5e9-be699458ef13: 5                # Recruiter Scheduling Interview
+  # bb38c734-716b-46a9-bc24-7d72b66e73da (On Hold): deliberately no SLA —
+  # an intentional pause, not staleness. Omitted = never flagged.
+  a48ce2e9-6df3-4438-a687-49a0ea05923f: 5                # HR manager screen
+  f97cd673-55a2-4f73-91f8-b06117e0b65b: 7                # Interview
+  b78629d6-a3a8-4177-9ab9-866968547729: 7                # Test task
+  14c4fdf5-4d99-41be-9b4b-2b529d37cf7b: 5                # Final Interview
+  8450b77c-f977-4f02-97f1-2452aaa65d7e: 5                # Reference check
+  offer: 3                                               # Offer
+
+default_sla_days: 5                                      # fallback for any stage not listed above
+
+no_sla_stages:
+  - bb38c734-716b-46a9-bc24-7d72b66e73da                  # On Hold — never flagged
+
+posting_health:
+  max_days_since_last_applicant: 14
+  min_active_candidates: 5
+  max_days_published: 60

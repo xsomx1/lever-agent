@@ -120,6 +120,29 @@ class LeverClient:
         postings = [p async for p in self.list_paginated("postings", params)]
         return [p for p in postings if _is_mine(p)]
 
+    async def get_opportunities_for_posting(self, posting_id: str) -> list[dict[str, Any]]:
+        """All opportunities (any stage, any pipeline) tied to one posting.
+
+        Live-verified 2026-08-18: each opportunity carries `lastAdvancedAt`, which
+        matches its last `stageChanges[].updatedAt` exactly — that is the reliable
+        "entered current stage" timestamp for SLA math (T1.1). The top-level
+        `updatedAt` field does not match it and must never be used for that
+        (docs/CONTEXT.md §3.1's trap).
+        """
+        params = {"posting_id": posting_id, "limit": 100}
+        return [opp async for opp in self.list_paginated("opportunities", params)]
+
+    async def get_disposition_stages(self) -> dict[str, Any]:
+        """Full stage list with `id`, `text`, `rank`, `pipeline`, in pipeline order.
+
+        `GET /disposition_stages` is NOT a paginated list endpoint — the response
+        is a single object: `{"data": {"stages": [...], ...}}`. `GET /stages`
+        returns only `{id, text}` with no ordering, which is why this endpoint is
+        used instead (docs/CONTEXT.md §3, trap 6).
+        """
+        response = await self._get("disposition_stages")
+        return response["data"]
+
 
 def _is_mine(posting: dict[str, Any]) -> bool:
     owner = posting.get("owner")

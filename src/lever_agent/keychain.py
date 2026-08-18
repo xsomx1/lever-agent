@@ -7,6 +7,7 @@ the security notes at the end of that file.
 
 from __future__ import annotations
 
+import getpass
 import os
 import subprocess
 
@@ -23,9 +24,11 @@ def get_lever_api_key() -> str:
     Equivalent to:
         security find-generic-password -a "$USER" -s lever-api-key -w
     """
-    user = os.environ.get("USER")
+    # $USER isn't guaranteed under launchd (T1.4) the way it is in an
+    # interactive shell — fall back to getpass, which asks the OS directly.
+    user = os.environ.get("USER") or getpass.getuser()
     if not user:
-        raise KeychainReadError("$USER is not set — cannot look up the Keychain entry")
+        raise KeychainReadError("could not determine the current user — cannot look up the Keychain entry")
 
     try:
         result = subprocess.run(

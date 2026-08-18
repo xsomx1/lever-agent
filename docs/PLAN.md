@@ -93,13 +93,16 @@ Read-only. Ships first, useful immediately, no risk.
 
 | Task | Description | Done when |
 |---|---|---|
-| **T1.1** | Per-stage SLA config; flag candidates sitting past it. Watermark on the `updated_at_start` filter, never on the `updatedAt` field | Correct flags across all 13 stages |
-| **T1.2** | Posting health: no new applicant in N days, fewer than K active candidates, published longer than a threshold | Flags my stale postings |
-| **T1.3** | Terminal digest via `rich` — grouped by posting, sorted by urgency | One command, readable output |
-| **T1.4** | Schedule it: `launchd` weekday mornings, output to a file I can open (or a Slack DM to myself if I'd rather) | Fires without me remembering |
-| **T1.5** | Store snapshots in SQLite so the digest can show day-over-day movement | Deltas appear on the second run |
+| **T1.1** | Per-stage SLA config; flag candidates sitting past it. Watermark on the `updated_at_start` filter, never on the `updatedAt` field | ✅ **Done 2026-08-18.** `config/pipeline.yaml` + `digest.py::compute_stage_flags`, keyed off `lastAdvancedAt` (verified live to be the reliable stage-entry timestamp — `updatedAt` is not) |
+| **T1.2** | Posting health: no new applicant in N days, fewer than K active candidates, published longer than a threshold | ✅ **Done 2026-08-18.** `digest.py::compute_posting_health`, all three conditions |
+| **T1.3** | Terminal digest via `rich` — grouped by posting, sorted by urgency | ✅ **Done 2026-08-18.** `uv run lever digest` — postings sorted worst-first, candidates by days-over-SLA |
+| **T1.4** | Schedule it: `launchd` weekday mornings, output to a file I can open (or a Slack DM to myself if I'd rather) | ✅ **Done 2026-08-18** (file output only, per decision this session). `lever digest` always writes `~/Library/Logs/lever-agent/digest-<date>.log`. `scripts/com.nzinevich.lever-agent.digest.plist` authored (Mon–Fri 08:00) but **not installed or loaded** — activating it is a separate explicit decision |
+| **T1.5** | Store snapshots in SQLite so the digest can show day-over-day movement | ✅ **Done 2026-08-18.** `state/lever_agent.db` (gitignored, PII-free per ADR-0004); verified live that deltas surface correctly (stage move, newly-raised flag, posting health change, active-count change) |
 
-**Acceptance:** one week of digests with no false "stale" flags from the `updatedAt` trap.
+**Acceptance:** one week of digests with no false "stale" flags from the `updatedAt` trap — the
+first real run (2026-08-18) surfaced many genuinely-overdue candidates (some 90+ days in
+"New applicant"/"Recruiter Scheduling Interview"), none of which looked like a false positive
+from the `updatedAt` trap. Worth re-checking after a full week per the original criterion.
 
 ---
 

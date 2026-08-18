@@ -7,9 +7,11 @@ Not a shared service, not a platform. A tool I run.
 
 ## Status
 
-Epic 0 (bootstrap) done except T0.7, which is waiting on a person, not code. Repo, toolchain,
-Keychain-backed auth, and the Lever client are all in place and verified against production
-Lever. Epic 1 (pipeline hygiene / digest) is next.
+Epic 0 (bootstrap) and Epic 1 (pipeline hygiene / digest) are done. `uv run lever digest`
+flags stale candidates by per-stage SLA, flags unhealthy postings, and shows day-over-day
+movement — verified against production Lever. T0.7 (who owns the "AI Screened" stage) is
+still open, waiting on Thomas Hansen; it only has to land before Epic 3. The `launchd`
+schedule for the digest is authored but not activated yet. Epic 2 (screening) is next.
 
 Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
 branch: `feature/lever-automation-agent`

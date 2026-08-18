@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd LaunchAgent for the Lever digest (T1.4). Runs in the user's own
+  session (not a system daemon), so Keychain access works the same as an
+  interactive shell.
+
+  NOT LOADED by default. To activate:
+    cp scripts/com.nzinevich.lever-agent.digest.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.nzinevich.lever-agent.digest.plist
+  To deactivate:
+    launchctl unload ~/Library/LaunchAgents/com.nzinevich.lever-agent.digest.plist
+
+  The digest itself writes its output to
+  ~/Library/Logs/lever-agent/digest-<date>.log regardless of how it's invoked.
+  StandardOutPath/StandardErrorPath below only capture launchd/uv-level
+  failures (e.g. the run never got as far as writing that file).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nzinevich.lever-agent.digest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/uv</string>
+        <string>run</string>
+        <string>--directory</string>
+        <string>/Users/n.zinevich/Desktop/Desktop/Level Automation Agent</string>
+        <string>lever</string>
+        <string>digest</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/n.zinevich/Desktop/Desktop/Level Automation Agent</string>
+
+    <!-- Mon-Fri, 08:00 local. Weekday: 1=Monday ... 5=Friday. Easy to retime. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/n.zinevich/Library/Logs/lever-agent/launchd-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/n.zinevich/Library/Logs/lever-agent/launchd-stderr.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

@@ -7,17 +7,18 @@ Not a shared service, not a platform. A tool I run.
 
 ## Status
 
-Epic 0 (bootstrap), Epic 1 (digest), Epic 2 (screening), and most of Epic 3 (writing back)
-are done. `uv run lever digest` flags stale candidates and unhealthy postings and shows
-day-over-day movement, on its own schedule (`launchd`, Mon–Fri 11:00 MSK). `uv run lever
-screen <posting_id>` scores a candidate's resume against the posting's rubric with Claude
+Epic 0 (bootstrap), Epic 1 (digest), Epic 2 (screening), and Epic 3 (writing back) are done.
+`uv run lever digest` flags stale candidates and unhealthy postings and shows day-over-day
+movement, on its own schedule (`launchd`, Mon–Fri 11:00 MSK). `uv run lever screen
+<posting_id>` scores a candidate's resume against the posting's rubric with Claude
 (`claude-sonnet-5` by default — a deliberate cost decision, see
 [ADR-0003](docs/adr/0003-claude-opus-5-native-pdf.md)'s amendment) and, with `--post-notes`,
-writes the score back to Lever as a note plus a `screened` tag — one real write made and
-verified. `lever advance` moves a candidate's stage with an interactive confirmation and a
-hard block on the "AI Screened" stage; built and dry-run-verified, no real stage move made
-yet. `lever audit` shows the local write history. T0.7 (who owns "AI Screened") is still
-open, waiting on Thomas Hansen — it gates a real stage move, not anything already shipped.
+writes the score back to Lever as a note plus a `screened` tag. `lever advance` moves a
+candidate's stage with an interactive confirmation and a hard block on the "AI Screened"
+stage — live-verified with a real round-trip move (`New applicant` →
+`Recruiter Scheduling Interview` → `New applicant`). `lever audit` shows the local write
+history. T0.7 (who owns "AI Screened") is still open, waiting on Thomas Hansen, but blocks
+nothing shipped — "AI Screened" itself just stays hard-blocked as a target.
 
 Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
 branch: `feature/lever-automation-agent`

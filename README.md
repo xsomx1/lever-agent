@@ -7,10 +7,12 @@ Not a shared service, not a platform. A tool I run.
 
 ## Status
 
-Planning complete, awaiting go-ahead to build. No code yet.
+Epic 0 (bootstrap) done except T0.7, which is waiting on a person, not code. Repo, toolchain,
+Keychain-backed auth, and the Lever client are all in place and verified against production
+Lever. Epic 1 (pipeline hygiene / digest) is next.
 
-Branch: `feature/lever-automation-agent` · target repo: a new **private** repo under
-[github.com/xsomx1](https://github.com/xsomx1)
+Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
+branch: `feature/lever-automation-agent`
 
 ## Documents
 

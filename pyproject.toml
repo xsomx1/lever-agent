@@ -1,0 +1,34 @@
+[project]
+name = "lever-agent"
+version = "0.1.0"
+description = "Personal Lever hiring agent — pipeline hygiene and first-pass screening"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=0.40,<1.0",
+    "httpx>=0.27,<0.30",
+    "tenacity>=8.2,<10.0",
+    "pydantic>=2.0,<3.0",
+    "typer>=0.12,<1.0",
+    "rich>=13.0,<14.0",
+]
+
+[project.scripts]
+lever = "lever_agent.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "respx>=0.21,<1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lever_agent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

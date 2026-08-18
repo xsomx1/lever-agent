@@ -68,17 +68,22 @@ build reaches it.
 
 | Task | Description | Done when |
 |---|---|---|
-| **T0.1** | Create the **private** repo under `xsomx1`, push this planning branch | `gh repo view` shows it private |
-| **T0.2** | Toolchain per the prerequisites table above: pin Python 3.13, then `pyproject.toml` with `anthropic`, `httpx`, `tenacity`, `pydantic`, `typer`, `rich` | `uv run lever --help` works |
-| **T0.3** | Read the Lever key from the Keychain at runtime (`security find-generic-password -a "$USER" -s lever-api-key -w`) — never from the repo, a `.env`, or an env var baked into a script | Client authenticates with no secret on disk |
-| **T0.4** | ✅ **Done 2026-08-18.** Lever user UID is `a245ada8-57eb-4bf7-8354-4635c02627d4` — the standing `perform_as`. Just put it in config | UID in local config |
-| **T0.5** | Identify my postings: `GET /v1/postings` with `expand=owner&expand=followers`, filter to me. `state=published` alone omits internal-jobsite postings — also pass `distributionChannel=public&distributionChannel=internal`. **Do not pass `confidentiality`** (see prerequisites) | The posting set matches what I actually hire for |
-| **T0.6** | Lever client module: async `httpx`, `asyncio.Semaphore(10)` for the 10 req/s limit, `tenacity` retry with jittered backoff (429 carries no `Retry-After`), cursor pagination on `hasNext`/`next`. Write it fresh from the public docs — do **not** copy the internal `lever-deep-sync` client into a personal repo | Paginates all my postings and their opportunities correctly |
-| **T0.7** | Establish what writes to the **"AI Screened"** stage before Epic 3 touches any stage. Likely the `screened.io` marketplace integration — if a vendor owns it, my writes would collide. Check Lever admin → Integrations, or ask Thomas Hansen | Written answer in `CONTEXT.md` §8 |
+| **T0.1** | Create the **private** repo under `xsomx1`, push this planning branch | ✅ **Done 2026-08-18.** `github.com/xsomx1/lever-agent`, private, `feature/lever-automation-agent` pushed |
+| **T0.2** | Toolchain per the prerequisites table above: pin Python 3.13, then `pyproject.toml` with `anthropic`, `httpx`, `tenacity`, `pydantic`, `typer`, `rich` | ✅ **Done 2026-08-18.** `pyproject.toml` + `uv sync`; `uv run lever --help` works |
+| **T0.3** | Read the Lever key from the Keychain at runtime (`security find-generic-password -a "$USER" -s lever-api-key -w`) — never from the repo, a `.env`, or an env var baked into a script | ✅ **Done 2026-08-18.** `src/lever_agent/keychain.py`; verified against a real `GET /v1/postings` call with the key never printed or persisted |
+| **T0.4** | ✅ **Done 2026-08-18.** Lever user UID is `a245ada8-57eb-4bf7-8354-4635c02627d4` — the standing `perform_as`. Just put it in config | ✅ `MY_LEVER_UID` in `src/lever_agent/config.py` |
+| **T0.5** | Identify my postings: `GET /v1/postings` with `expand=owner&expand=followers`, filter to me. `state=published` alone omits internal-jobsite postings — also pass `distributionChannel=public&distributionChannel=internal`. **Do not pass `confidentiality`** (see prerequisites) | ✅ **Done 2026-08-18.** `LeverClient.get_my_postings()` + `uv run lever postings mine` — returns my 3 real postings against production Lever |
+| **T0.6** | Lever client module: async `httpx`, `asyncio.Semaphore(10)` for the 10 req/s limit, `tenacity` retry with jittered backoff (429 carries no `Retry-After`), cursor pagination on `hasNext`/`next`. Write it fresh from the public docs — do **not** copy the internal `lever-deep-sync` client into a personal repo | ✅ **Done 2026-08-18.** `src/lever_agent/lever_client.py`, written fresh from the public docs; unit-tested for pagination, `distributionChannel`, and the `confidentiality` guard |
+| **T0.7** | Establish what writes to the **"AI Screened"** stage before Epic 3 touches any stage. Likely the `screened.io` marketplace integration — if a vendor owns it, my writes would collide. Check Lever admin → Integrations, or ask Thomas Hansen | ⏳ **Open.** Slack DM drafted for Thomas Hansen (`U08C4HEFB52`) 2026-08-18, not yet sent — pending my go-ahead |
 
 **Testing:** unit tests for cursor pagination and for the `distributionChannel` default. Add a
 guard test asserting the client **never** emits a `confidentiality` parameter — this key 403s on
 it, so a stray one fails the request outright rather than degrading. Nothing more.
+
+**Epic 0 status, 2026-08-18: closed except T0.7.** `uv run pytest` is 7/7 green
+(`tests/test_pagination.py`, `tests/test_distribution_channel.py`,
+`tests/test_confidentiality_guard.py`). T0.7 is unblocked to run in parallel with Epic 1 — it
+only has to land before Epic 3.
 
 ---
 

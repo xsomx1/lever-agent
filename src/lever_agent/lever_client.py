@@ -100,6 +100,79 @@ class LeverClient:
         response.raise_for_status()
         return response.content
 
+    @retry(
+        retry=retry_if_exception(_is_retryable),
+        wait=wait_exponential_jitter(initial=1, max=30),
+        stop=stop_after_attempt(6),
+        reraise=True,
+    )
+    async def _post(
+        self, path: str, params: dict[str, Any] | None = None, json_body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if params and "confidentiality" in params:
+            raise ValueError(
+                "This Lever key has no confidential-data access; "
+                "'confidentiality' must never be sent (see docs/PLAN.md)"
+            )
+        async with self._semaphore:
+            response = await self._client.post(path, params=params, json=json_body)
+        response.raise_for_status()
+        return response.json()
+
+    @retry(
+        retry=retry_if_exception(_is_retryable),
+        wait=wait_exponential_jitter(initial=1, max=30),
+        stop=stop_after_attempt(6),
+        reraise=True,
+    )
+    async def _put(
+        self, path: str, params: dict[str, Any] | None = None, json_body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        if params and "confidentiality" in params:
+            raise ValueError(
+                "This Lever key has no confidential-data access; "
+                "'confidentiality' must never be sent (see docs/PLAN.md)"
+            )
+        async with self._semaphore:
+            response = await self._client.put(path, params=params, json=json_body)
+        response.raise_for_status()
+        return response.json()
+
+    async def create_note(self, opportunity_id: str, text: str) -> dict[str, Any]:
+        """POST /opportunities/:id/notes, attributed via perform_as (T3.1).
+
+        Body shape (`{"value": text}`) follows Lever's documented note-creation
+        convention. This key can't read notes back to double-check (GET .../notes
+        403s, expand=notes 400s — see docs/PLAN.md Epic 3 context), so this is
+        confirmed by the one live write the plan calls for, not by a prior
+        read-only probe like everything else in this client.
+        """
+        return await self._post(
+            f"opportunities/{opportunity_id}/notes",
+            params={"perform_as": MY_LEVER_UID},
+            json_body={"value": text},
+        )
+
+    async def add_tags(self, opportunity_id: str, tags: list[str]) -> dict[str, Any]:
+        """POST /opportunities/:id/addTags, attributed via perform_as (T3.2)."""
+        return await self._post(
+            f"opportunities/{opportunity_id}/addTags",
+            params={"perform_as": MY_LEVER_UID},
+            json_body={"tags": tags},
+        )
+
+    async def update_stage(self, opportunity_id: str, stage_id: str) -> dict[str, Any]:
+        """PUT /opportunities/:id/stage, attributed via perform_as (T3.3).
+
+        Callers must apply the AI-Screened guard and the explicit-confirmation
+        prompt themselves (see writes.py) — this method only makes the call.
+        """
+        return await self._put(
+            f"opportunities/{opportunity_id}/stage",
+            params={"perform_as": MY_LEVER_UID},
+            json_body={"stage": stage_id},
+        )
+
     async def list_paginated(
         self, path: str, params: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:

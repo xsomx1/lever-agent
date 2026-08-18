@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import typer
@@ -12,6 +12,7 @@ from anthropic import Anthropic
 from rich.console import Console
 from rich.table import Table
 
+from lever_agent.audit_log import AuditLog
 from lever_agent.digest import build_digest
 from lever_agent.keychain import get_anthropic_api_key, get_lever_api_key
 from lever_agent.lever_client import LeverClient
@@ -35,6 +36,13 @@ from lever_agent.snapshot_store import (
     diff_postings,
 )
 from lever_agent.stages import get_stage_lookup, stage_name
+from lever_agent.writes import (
+    AIScreenedStageBlockedError,
+    advance_stage,
+    build_note_text,
+    write_note,
+    write_tag,
+)
 
 app = typer.Typer(help="Personal Lever hiring agent.")
 postings_app = typer.Typer(help="Posting-level commands.")
@@ -209,10 +217,24 @@ def screen(
     model: str = typer.Option(
         SCREENING_MODEL, "--model", help="Anthropic model to screen with (default: sonnet-5, a deliberate cost choice)"
     ),
+    post_notes: bool = typer.Option(
+        False, "--post-notes", help="Write a note + the 'screened' tag to Lever for each candidate screened (T3.1/T3.2)"
+    ),
+    tag_only: bool = typer.Option(
+        False, "--tag", help="Add the 'screened' tag without a note. Combines with --post-notes if both given."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="With --post-notes/--tag: print what would be sent instead of writing to Lever"
+    ),
+    opportunity: str = typer.Option(
+        None, "--opportunity", help="Screen only this one opportunity ID, ignoring --limit/--all"
+    ),
 ) -> None:
     """Screen a posting's candidates against its rubric with Claude (Epic 2)."""
     console = Console()
-    asyncio.run(_screen(console, posting_id, limit, all_candidates, detail, model))
+    asyncio.run(
+        _screen(console, posting_id, limit, all_candidates, detail, model, post_notes, tag_only, dry_run, opportunity)
+    )
 
 
 async def _screen(
@@ -222,6 +244,10 @@ async def _screen(
     all_candidates: bool,
     detail: str | None,
     model: str,
+    post_notes: bool = False,
+    tag_only: bool = False,
+    dry_run: bool = False,
+    opportunity: str | None = None,
 ) -> None:
     try:
         rubric = load_rubric(posting_id)
@@ -235,7 +261,13 @@ async def _screen(
     async with LeverClient(lever_key) as client:
         opportunities = await client.get_opportunities_for_posting(posting_id)
         active = [o for o in opportunities if not o.get("archived")]
-        to_screen = active if all_candidates else active[:limit]
+        if opportunity:
+            to_screen = [o for o in active if o["id"] == opportunity]
+            if not to_screen:
+                console.print(f"[red]Opportunity {opportunity} not found or not active under {posting_id}[/red]")
+                raise typer.Exit(code=1)
+        else:
+            to_screen = active if all_candidates else active[:limit]
 
         console.print(
             f"Screening {len(to_screen)} of {len(active)} active candidates for "
@@ -257,15 +289,35 @@ async def _screen(
 
             cache_read_tokens_total += getattr(response.usage, "cache_read_input_tokens", 0) or 0
             overall = compute_overall_score(rubric, verdict)
-            scores.append(
-                CandidateScore(
-                    opportunity_id=opp["id"],
-                    name=opp.get("name", "?"),
-                    overall_score=overall,
-                    recommendation=recommendation_band(overall),
-                    verdict=verdict,
-                )
+            score = CandidateScore(
+                opportunity_id=opp["id"],
+                name=opp.get("name", "?"),
+                overall_score=overall,
+                recommendation=recommendation_band(overall),
+                verdict=verdict,
             )
+            scores.append(score)
+
+            if post_notes or tag_only:
+                now_ms = int(time.time() * 1000)
+                with AuditLog() as audit:
+                    if post_notes:
+                        note_text = build_note_text(rubric, score)
+                        note_result = await write_note(
+                            client, audit, posting_id, score, note_text, now_ms=now_ms, dry_run=dry_run
+                        )
+                        if dry_run:
+                            console.print(f"  [dim]would POST note for {score.name}:[/dim]\n{note_text}")
+                        else:
+                            console.print(f"  [green]note posted for {score.name}[/green]")
+                    if tag_only or post_notes:
+                        tag_result = await write_tag(
+                            client, audit, posting_id, score.opportunity_id, now_ms=now_ms, dry_run=dry_run
+                        )
+                        if dry_run:
+                            console.print(f"  [dim]would tag {score.name}: {tag_result.would_send}[/dim]")
+                        else:
+                            console.print(f"  [green]tagged {score.name} '{tag_result.detail}'[/green]")
 
     ranked = rank_candidates(scores)
 
@@ -300,6 +352,106 @@ async def _screen(
                 console.print(f"[bold]{cv.name}[/bold]: {cv.score}/10")
                 console.print(f"  Evidence: [italic]{cv.evidence_quote}[/italic]")
                 console.print(f"  Rationale: {cv.rationale}")
+
+
+@app.command("advance")
+def advance(
+    opportunity_id: str = typer.Argument(..., help="Lever opportunity ID"),
+    target_stage: str = typer.Argument(..., help="Target stage name (e.g. 'Interview') or raw stage ID"),
+    posting_id: str = typer.Option(..., "--posting", help="Posting ID this opportunity belongs to"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the intended call without sending it"),
+) -> None:
+    """Move one candidate to a new stage — one at a time, explicit confirmation (T3.3)."""
+    console = Console()
+    asyncio.run(_advance(console, opportunity_id, target_stage, posting_id, dry_run))
+
+
+async def _advance(
+    console: Console, opportunity_id: str, target_stage: str, posting_id: str, dry_run: bool
+) -> None:
+    lever_key = get_lever_api_key()
+    async with LeverClient(lever_key) as client:
+        stage_lookup = await get_stage_lookup(client)
+
+        target_stage_id = target_stage
+        target_stage_text = target_stage
+        if target_stage not in stage_lookup:
+            match = next(
+                (sid for sid, info in stage_lookup.items() if info["text"].lower() == target_stage.lower()),
+                None,
+            )
+            if match is None:
+                console.print(f"[red]Unknown stage '{target_stage}'. Known stages:[/red]")
+                for info in stage_lookup.values():
+                    console.print(f"  {info['text']}")
+                raise typer.Exit(code=1)
+            target_stage_id = match
+            target_stage_text = stage_lookup[match]["text"]
+
+        opportunities = await client.get_opportunities_for_posting(posting_id)
+        opp = next((o for o in opportunities if o["id"] == opportunity_id), None)
+        if opp is None:
+            console.print(f"[red]Opportunity {opportunity_id} not found under posting {posting_id}[/red]")
+            raise typer.Exit(code=1)
+
+        current_stage_text = stage_name(stage_lookup, opp.get("stage", "?"))
+
+        if not dry_run:
+            confirmed = typer.confirm(
+                f"Move {opp.get('name', opportunity_id)} from '{current_stage_text}' "
+                f"to '{target_stage_text}'?"
+            )
+            if not confirmed:
+                console.print("[yellow]Cancelled — no change made.[/yellow]")
+                raise typer.Exit(code=0)
+
+        now_ms = int(time.time() * 1000)
+        with AuditLog() as audit:
+            try:
+                result = await advance_stage(
+                    client, audit, posting_id, opportunity_id, target_stage_id, target_stage_text,
+                    now_ms=now_ms, dry_run=dry_run,
+                )
+            except AIScreenedStageBlockedError as exc:
+                console.print(f"[red]{exc}[/red]")
+                raise typer.Exit(code=1) from None
+
+        if dry_run:
+            console.print(f"[dim]would PUT stage for {opportunity_id}: {result.would_send}[/dim]")
+        else:
+            console.print(
+                f"[green]{opp.get('name', opportunity_id)} moved from "
+                f"'{current_stage_text}' to '{target_stage_text}'.[/green]"
+            )
+
+
+@app.command("audit")
+def audit_command(limit: int = typer.Option(50, help="How many recent entries to show")) -> None:
+    """Show the local write audit log (T3.4) — most recent first."""
+    console = Console()
+    with AuditLog() as audit:
+        entries = audit.recent(limit)
+
+    table = Table(title=f"Write audit log (last {len(entries)})")
+    table.add_column("When")
+    table.add_column("Opportunity")
+    table.add_column("Action")
+    table.add_column("Detail")
+    table.add_column("Dry-run")
+    table.add_column("Success")
+
+    for entry in entries:
+        when = datetime.fromtimestamp(entry.timestamp_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
+        table.add_row(
+            when,
+            entry.opportunity_id,
+            entry.action,
+            entry.detail,
+            "yes" if entry.dry_run else "no",
+            "yes" if entry.success else "[red]no[/red]",
+        )
+
+    console.print(table)
 
 
 if __name__ == "__main__":

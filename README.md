@@ -7,16 +7,17 @@ Not a shared service, not a platform. A tool I run.
 
 ## Status
 
-Epic 0 (bootstrap), Epic 1 (pipeline hygiene / digest), and Epic 2 (screening) are done.
-`uv run lever digest` flags stale candidates by per-stage SLA, flags unhealthy postings, and
-shows day-over-day movement. `uv run lever screen <posting_id>` pulls a candidate's resume,
-scores it against that posting's rubric with Claude (`claude-sonnet-5` by default — a
-deliberate cost decision, see [ADR-0003](docs/adr/0003-claude-opus-5-native-pdf.md)'s
-amendment), and ranks the cohort — all verified against production Lever and a live Claude
-key. The digest runs on its own: a `launchd` LaunchAgent fires it Mon–Fri at 11:00 MSK,
-writing to `~/Library/Logs/lever-agent/digest-<date>.log`. T0.7 (who owns the "AI Screened"
-stage) is still open, waiting on Thomas Hansen; it only has to land before Epic 3, which is
-next — writing scores back to Lever as notes.
+Epic 0 (bootstrap), Epic 1 (digest), Epic 2 (screening), and most of Epic 3 (writing back)
+are done. `uv run lever digest` flags stale candidates and unhealthy postings and shows
+day-over-day movement, on its own schedule (`launchd`, Mon–Fri 11:00 MSK). `uv run lever
+screen <posting_id>` scores a candidate's resume against the posting's rubric with Claude
+(`claude-sonnet-5` by default — a deliberate cost decision, see
+[ADR-0003](docs/adr/0003-claude-opus-5-native-pdf.md)'s amendment) and, with `--post-notes`,
+writes the score back to Lever as a note plus a `screened` tag — one real write made and
+verified. `lever advance` moves a candidate's stage with an interactive confirmation and a
+hard block on the "AI Screened" stage; built and dry-run-verified, no real stage move made
+yet. `lever audit` shows the local write history. T0.7 (who owns "AI Screened") is still
+open, waiting on Thomas Hansen — it gates a real stage move, not anything already shipped.
 
 Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
 branch: `feature/lever-automation-agent`
@@ -46,8 +47,11 @@ published postings that should have been closed. A digest I can read in the morn
 
 **Screening** — pull the resume PDF for a candidate on one of my postings, score it against
 that posting's rubric with Claude, and rank the cohort (`uv run lever screen <posting_id>`).
-Writing the score back into Lever as a note, and any stage move, is Epic 3 — this only
-computes and displays for now.
+`--post-notes` writes the score back as a Lever note plus a `screened` tag.
+
+**Writing back** — `lever advance <opportunity_id> <stage>` moves one candidate at a time,
+with an interactive confirmation and `--dry-run` on every write path. No automated rejection,
+hire, or candidate email exists anywhere in this tool (ADR-0002).
 
 **Scoped to my own hiring** — postings where I'm the owner, a follower, or the hiring manager
 (ADR-0005), not all 185.

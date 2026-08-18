@@ -144,12 +144,18 @@ irreversible action stays behind my confirmation.
 
 | Task | Description | Done when |
 |---|---|---|
-| **T3.1** | Post the score to Lever as a note (`POST /v1/opportunities/:id/notes`) with `perform_as` = me. Reversible, low blast radius, immediately useful. Notes created via the API can be edited via the API; notes made in the UI cannot | Score visible on the profile, attributed to me |
-| **T3.2** | Tag screened candidates (`addTags`). Careful: tags are free-text, case-sensitive, and auto-created — a typo makes a new tag. Use a fixed constant | Consistent tag, no strays |
-| **T3.3** | Stage moves (`PUT /v1/opportunities/:id/stage`) only on explicit confirmation, one candidate at a time, never batched, never scheduled. **Do not write to "AI Screened"** until T0.7 settles who owns it | I advance a candidate from the CLI; Lever reflects it |
-| **T3.4** | Local audit log: what changed, when, and the score it was based on. Every write gets a `--dry-run` that logs the intended call without sending it | Dry-run output for every write path |
+| **T3.1** | Post the score to Lever as a note (`POST /v1/opportunities/:id/notes`) with `perform_as` = me. Reversible, low blast radius, immediately useful. Notes created via the API can be edited via the API; notes made in the UI cannot | ✅ **Done 2026-08-18.** `create_note()` in `lever_client.py`, body `{"value": text}` — worked on the first live attempt (no schema iteration needed). `lever screen <posting_id> --post-notes`. One real write made and verified: Omar Khan (`4a6a14de-9981-47ad-9f28-792563515b8c`) |
+| **T3.2** | Tag screened candidates (`addTags`). Careful: tags are free-text, case-sensitive, and auto-created — a typo makes a new tag. Use a fixed constant | ✅ **Done 2026-08-18.** `config.SCREENING_TAG = "screened"`, checked live against `GET /tags` (1000+ existing tags) first — no collision. `add_tags()`, `--tag` / `--post-notes` on `lever screen` |
+| **T3.3** | Stage moves (`PUT /v1/opportunities/:id/stage`) only on explicit confirmation, one candidate at a time, never batched, never scheduled. **Do not write to "AI Screened"** until T0.7 settles who owns it | ✅ **Built and dry-run verified 2026-08-18.** `lever advance <opportunity_id> <stage_name> --posting <id>` resolves human-readable stage names via the live `disposition_stages` lookup, prompts an interactive confirmation in real (non-dry-run) mode, and hard-blocks "AI Screened" as a target unconditionally (confirmed live: raises before any network call). **No real stage move has been made yet** — T0.7 is still open and a live stage move needs its own separate go-ahead |
+| **T3.4** | Local audit log: what changed, when, and the score it was based on. Every write gets a `--dry-run` that logs the intended call without sending it | ✅ **Done 2026-08-18.** `audit_log.py` (`state/lever_agent.db`, PII-free — stage IDs/tag names/scores only), `lever audit` viewer. Verified live: dry-run and real writes both logged correctly, including the blocked AI-Screened attempt (which logs nothing, by design — it never reaches the write functions) |
 
-**Never:** automated rejection, automated hire, or any email to a candidate.
+**Never:** automated rejection, automated hire, or any email to a candidate. No such function
+exists anywhere in `src/lever_agent/writes.py`.
+
+**Epic 3 status, 2026-08-18: T3.1/T3.2/T3.4 fully closed (one real write made and verified).
+T3.3 built and dry-run-verified but not yet live-tested — waiting on a specific go-ahead for
+an actual stage move, separate from the note/tag write already authorized.** `uv run pytest`
+is 53/53 green.
 
 ---
 

@@ -8,13 +8,25 @@ from datetime import date
 from pathlib import Path
 
 import typer
+from anthropic import Anthropic
 from rich.console import Console
 from rich.table import Table
 
 from lever_agent.digest import build_digest
-from lever_agent.keychain import get_lever_api_key
+from lever_agent.keychain import get_anthropic_api_key, get_lever_api_key
 from lever_agent.lever_client import LeverClient
 from lever_agent.pipeline_config import load_pipeline_config
+from lever_agent.rubric import load_rubric
+from lever_agent.screening import MODEL as SCREENING_MODEL
+from lever_agent.screening import (
+    CandidateScore,
+    ScreeningRefusalError,
+    compute_overall_score,
+    fetch_resume_bytes,
+    rank_candidates,
+    recommendation_band,
+    score_resume,
+)
 from lever_agent.snapshot_store import (
     CandidateSnapshotRow,
     PostingSnapshotRow,
@@ -182,6 +194,112 @@ def _render_digest(console, posting_digests, stage_lookup, candidate_deltas, pos
             console.print(f"  {line}")
     else:
         console.print("[dim]No prior snapshot to diff against, or nothing changed.[/dim]")
+
+
+@app.command("screen")
+def screen(
+    posting_id: str = typer.Argument(..., help="Lever posting ID (see 'lever postings mine')"),
+    limit: int = typer.Option(5, help="Max candidates to screen. Ignored if --all is set."),
+    all_candidates: bool = typer.Option(
+        False, "--all", help="Screen every active candidate in the posting (real $ per candidate)"
+    ),
+    detail: str = typer.Option(
+        None, "--detail", help="Opportunity ID to show the full per-criterion breakdown for"
+    ),
+    model: str = typer.Option(
+        SCREENING_MODEL, "--model", help="Anthropic model to screen with (default: sonnet-5, a deliberate cost choice)"
+    ),
+) -> None:
+    """Screen a posting's candidates against its rubric with Claude (Epic 2)."""
+    console = Console()
+    asyncio.run(_screen(console, posting_id, limit, all_candidates, detail, model))
+
+
+async def _screen(
+    console: Console,
+    posting_id: str,
+    limit: int,
+    all_candidates: bool,
+    detail: str | None,
+    model: str,
+) -> None:
+    try:
+        rubric = load_rubric(posting_id)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+
+    lever_key = get_lever_api_key()
+    anthropic_client = Anthropic(api_key=get_anthropic_api_key())
+
+    async with LeverClient(lever_key) as client:
+        opportunities = await client.get_opportunities_for_posting(posting_id)
+        active = [o for o in opportunities if not o.get("archived")]
+        to_screen = active if all_candidates else active[:limit]
+
+        console.print(
+            f"Screening {len(to_screen)} of {len(active)} active candidates for "
+            f"[bold]{rubric.posting_title}[/bold] ({len(rubric.criteria)}-criterion rubric)…"
+        )
+
+        scores: list[CandidateScore] = []
+        cache_read_tokens_total = 0
+        for opp in to_screen:
+            try:
+                resume_bytes = await fetch_resume_bytes(client, opp["id"])
+                verdict, response = score_resume(anthropic_client, rubric, resume_bytes, model=model)
+            except ScreeningRefusalError as exc:
+                console.print(f"  [red]{opp.get('name', opp['id'])}: {exc}[/red]")
+                continue
+            except ValueError as exc:
+                console.print(f"  [yellow]{opp.get('name', opp['id'])}: skipped — {exc}[/yellow]")
+                continue
+
+            cache_read_tokens_total += getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            overall = compute_overall_score(rubric, verdict)
+            scores.append(
+                CandidateScore(
+                    opportunity_id=opp["id"],
+                    name=opp.get("name", "?"),
+                    overall_score=overall,
+                    recommendation=recommendation_band(overall),
+                    verdict=verdict,
+                )
+            )
+
+    ranked = rank_candidates(scores)
+
+    table = Table(title=f"Screening — {rubric.posting_title}")
+    table.add_column("Candidate")
+    table.add_column("Score", justify="right")
+    table.add_column("Recommendation")
+    table.add_column("Summary")
+
+    for score in ranked:
+        table.add_row(
+            score.name,
+            f"{score.overall_score:.1f}",
+            score.recommendation,
+            score.verdict.summary,
+        )
+
+    console.print(table)
+    if len(scores) > 1:
+        console.print(
+            f"[dim]cache_read_input_tokens across this cohort: {cache_read_tokens_total} "
+            f"(non-zero from candidate 2 on confirms prompt caching is working, T2.4)[/dim]"
+        )
+
+    if detail:
+        match = next((s for s in ranked if s.opportunity_id == detail), None)
+        if match is None:
+            console.print(f"[yellow]No screened candidate with opportunity ID {detail} in this run.[/yellow]")
+        else:
+            console.rule(f"Detail — {match.name}")
+            for cv in match.verdict.criterion_verdicts:
+                console.print(f"[bold]{cv.name}[/bold]: {cv.score}/10")
+                console.print(f"  Evidence: [italic]{cv.evidence_quote}[/italic]")
+                console.print(f"  Rationale: {cv.rationale}")
 
 
 if __name__ == "__main__":

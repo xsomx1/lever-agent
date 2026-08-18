@@ -1,8 +1,8 @@
-"""Read the Lever API key from the macOS Keychain at runtime.
+"""Read API keys from the macOS Keychain at runtime.
 
-Deliberately the only place this key is read from. No `.env`, no environment
-variable, no value ever written to a file or logged. See docs/PLAN.md T0.3 and
-the security notes at the end of that file.
+Deliberately the only place these keys are read from. No `.env`, no
+environment variable, no value ever written to a file or logged. See
+docs/PLAN.md T0.3 and the security notes at the end of that file.
 """
 
 from __future__ import annotations
@@ -11,19 +11,15 @@ import getpass
 import os
 import subprocess
 
-from lever_agent.config import KEYCHAIN_SERVICE
+from lever_agent.config import ANTHROPIC_KEYCHAIN_SERVICE, KEYCHAIN_SERVICE
 
 
 class KeychainReadError(RuntimeError):
-    """Raised when the Lever API key cannot be read from the Keychain."""
+    """Raised when a key cannot be read from the Keychain."""
 
 
-def get_lever_api_key() -> str:
-    """Return the Lever API key stored in the macOS Keychain.
-
-    Equivalent to:
-        security find-generic-password -a "$USER" -s lever-api-key -w
-    """
+def _read_keychain_secret(service: str) -> str:
+    """Equivalent to: security find-generic-password -a "$USER" -s <service> -w"""
     # $USER isn't guaranteed under launchd (T1.4) the way it is in an
     # interactive shell — fall back to getpass, which asks the OS directly.
     user = os.environ.get("USER") or getpass.getuser()
@@ -32,15 +28,7 @@ def get_lever_api_key() -> str:
 
     try:
         result = subprocess.run(
-            [
-                "security",
-                "find-generic-password",
-                "-a",
-                user,
-                "-s",
-                KEYCHAIN_SERVICE,
-                "-w",
-            ],
+            ["security", "find-generic-password", "-a", user, "-s", service, "-w"],
             capture_output=True,
             text=True,
             check=True,
@@ -51,13 +39,21 @@ def get_lever_api_key() -> str:
         ) from exc
     except subprocess.CalledProcessError as exc:
         raise KeychainReadError(
-            f"Keychain lookup for service '{KEYCHAIN_SERVICE}' failed "
+            f"Keychain lookup for service '{service}' failed "
             f"(account '{user}'): {exc.stderr.strip()}"
         ) from exc
 
-    key = result.stdout.strip()
-    if not key:
-        raise KeychainReadError(
-            f"Keychain entry '{KEYCHAIN_SERVICE}' for account '{user}' is empty"
-        )
-    return key
+    value = result.stdout.strip()
+    if not value:
+        raise KeychainReadError(f"Keychain entry '{service}' for account '{user}' is empty")
+    return value
+
+
+def get_lever_api_key() -> str:
+    """Return the Lever API key stored in the macOS Keychain (T0.3)."""
+    return _read_keychain_secret(KEYCHAIN_SERVICE)
+
+
+def get_anthropic_api_key() -> str:
+    """Return the Anthropic API key stored in the macOS Keychain (Epic 2 prerequisite)."""
+    return _read_keychain_secret(ANTHROPIC_KEYCHAIN_SERVICE)

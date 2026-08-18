@@ -7,13 +7,16 @@ Not a shared service, not a platform. A tool I run.
 
 ## Status
 
-Epic 0 (bootstrap) and Epic 1 (pipeline hygiene / digest) are done. `uv run lever digest`
-flags stale candidates by per-stage SLA, flags unhealthy postings, and shows day-over-day
-movement — verified against production Lever. The digest now also runs on its own: a
-`launchd` LaunchAgent fires it Mon–Fri at 08:00, writing to
-`~/Library/Logs/lever-agent/digest-<date>.log`. T0.7 (who owns the "AI Screened" stage) is
-still open, waiting on Thomas Hansen; it only has to land before Epic 3. Epic 2 (screening)
-is next.
+Epic 0 (bootstrap), Epic 1 (pipeline hygiene / digest), and Epic 2 (screening) are done.
+`uv run lever digest` flags stale candidates by per-stage SLA, flags unhealthy postings, and
+shows day-over-day movement. `uv run lever screen <posting_id>` pulls a candidate's resume,
+scores it against that posting's rubric with Claude (`claude-sonnet-5` by default — a
+deliberate cost decision, see [ADR-0003](docs/adr/0003-claude-opus-5-native-pdf.md)'s
+amendment), and ranks the cohort — all verified against production Lever and a live Claude
+key. The digest runs on its own: a `launchd` LaunchAgent fires it Mon–Fri at 11:00 MSK,
+writing to `~/Library/Logs/lever-agent/digest-<date>.log`. T0.7 (who owns the "AI Screened"
+stage) is still open, waiting on Thomas Hansen; it only has to land before Epic 3, which is
+next — writing scores back to Lever as notes.
 
 Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
 branch: `feature/lever-automation-agent`
@@ -32,7 +35,7 @@ branch: `feature/lever-automation-agent`
 |---|---|
 | [0001](docs/adr/0001-standalone-personal-agent.md) | A standalone personal CLI, not n8n and not the corporate Cloud Run platform |
 | [0002](docs/adr/0002-human-in-the-loop.md) | Human-in-the-loop on the reject and hire gates |
-| [0003](docs/adr/0003-claude-opus-5-native-pdf.md) | Claude Opus 5 with native PDF input and structured outputs — no text-extraction library |
+| [0003](docs/adr/0003-claude-opus-5-native-pdf.md) | Native PDF input and structured outputs — no text-extraction library. Default model amended 2026-08-18 to `claude-sonnet-5` (was Opus 5) as a deliberate cost decision |
 | [0004](docs/adr/0004-local-state-sqlite.md) | Local SQLite for state; no candidate PII persisted |
 | [0005](docs/adr/0005-postings-mine-includes-hiring-manager.md) | "My postings" also includes postings where I'm the hiring manager, not just owner/follower |
 
@@ -41,9 +44,10 @@ branch: `feature/lever-automation-agent`
 **Pipeline hygiene** — stale candidates past a per-stage SLA, postings with no movement,
 published postings that should have been closed. A digest I can read in the morning.
 
-**Screening** — pull the resume PDF for a new applicant on one of my postings, score it
-against that posting's rubric with Claude, and rank. The score goes back into Lever as a
-note; stage moves need my confirmation.
+**Screening** — pull the resume PDF for a candidate on one of my postings, score it against
+that posting's rubric with Claude, and rank the cohort (`uv run lever screen <posting_id>`).
+Writing the score back into Lever as a note, and any stage move, is Epic 3 — this only
+computes and displays for now.
 
 **Scoped to my own hiring** — postings where I'm the owner, a follower, or the hiring manager
 (ADR-0005), not all 185.

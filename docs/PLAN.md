@@ -113,18 +113,27 @@ straight to Claude as a document block, so there is no text-extraction step at a
 
 | Task | Description | Done when |
 |---|---|---|
-| **T2.1** | Rubric per posting: criteria and weights in a small YAML file per posting, versioned in the repo | Rubric for one real posting |
-| **T2.2** | Fetch the resume: `GET /v1/opportunities/:id/resumes`, then `.../download` for the file. Base64 it into a `document` content block. Limits: 32 MB request, 100 pages | Resume reaches Claude intact |
-| **T2.3** | Score with `claude-opus-5` via `client.messages.parse()` against a Pydantic verdict model — per-criterion score, evidence quote, overall recommendation. Structured outputs guarantee it parses | Schema-valid verdict every time |
-| **T2.4** | Cache the rubric and system prompt with `cache_control` (512-token minimum on Opus 5) so screening a cohort pays for the rubric once | `cache_read_input_tokens` non-zero from the second candidate on |
-| **T2.5** | Rank a posting's candidates; show the reasoning behind each score, not just the number | I can review a cohort in one screen |
-| **T2.6** | Keep resume bytes and extracted text **in memory only** — never to disk, logs, or SQLite. Store the score and reasoning, not the PII | Verified by inspection |
+| **T2.1** | Rubric per posting: criteria and weights in a small YAML file per posting, versioned in the repo | ✅ **Done 2026-08-18.** `config/rubrics/f5349e52-94b9-4eb7-aaea-e83b001854a3.yaml` (Staff SWE — IAM, Serbia), 6 criteria drawn from the real JD, weights validated to sum to 1.0 |
+| **T2.2** | Fetch the resume: `GET /v1/opportunities/:id/resumes`, then `.../download` for the file. Base64 it into a `document` content block. Limits: 32 MB request, 100 pages | ✅ **Done 2026-08-18.** Live-verified the `file.downloadUrl` field 403s for this key — the constructed `opportunities/:id/resumes/:resumeId/download` path (as literally described here) works and returns raw PDF bytes; `download_resume_bytes()` in `lever_client.py` uses that path only |
+| **T2.3** | Score with `claude-sonnet-5` (default; amended 2026-08-18, was `claude-opus-5` — see [ADR-0003](adr/0003-claude-opus-5-native-pdf.md)'s amendment) via `client.messages.parse()` against a Pydantic verdict model — per-criterion score, evidence quote, overall recommendation. Structured outputs guarantee it parses | ✅ **Done 2026-08-18.** `screening.py::score_resume()`; verified live against 4 real candidates + a 3-profile golden set — schema-valid every time, `stop_reason` refusal guard in place |
+| **T2.4** | Cache the rubric and system prompt with `cache_control` so screening a cohort pays for the rubric once | ✅ **Done 2026-08-18.** Verified live: `cache_read_input_tokens` was 0 on the first candidate of a fresh cohort, non-zero (1081-3243 across runs) from the second candidate on |
+| **T2.5** | Rank a posting's candidates; show the reasoning behind each score, not just the number | ✅ **Done 2026-08-18.** `uv run lever screen <posting_id>` ranks by computed overall score; `--detail <opportunity_id>` shows the full per-criterion evidence/rationale breakdown |
+| **T2.6** | Keep resume bytes and extracted text **in memory only** — never to disk, logs, or SQLite. Store the score and reasoning, not the PII | ✅ **Done 2026-08-18.** Verified by inspection (no `open`/`.write` in `screening.py` or the new `lever_client.py` methods) and by grepping the repo, `state/lever_agent.db`, and `~/Library/Logs/lever-agent/` after a real screening run — no candidate names anywhere outside Lever itself |
 
-**Cost note:** Opus 5 is $5/M input, $25/M output. Screening is not latency-sensitive, so
-if a cohort is large, the Batches API halves it. Worth wiring only if volume justifies it.
+**Cost note:** Sonnet 5 is the default model as of 2026-08-18 (a deliberate cost decision —
+see ADR-0003's amendment); `lever screen --model claude-opus-5` escalates a specific cohort
+if quality ever demands it ($5/M input, $25/M output). Screening is not latency-sensitive, so
+if a cohort is large, the Batches API halves whichever model is in use. Worth wiring only if
+volume justifies it.
 
 **Testing:** a golden set of a few anonymized profiles with expected score bands, so rubric
 or prompt edits can't silently drift. This is the one place worth real test investment.
+
+**Epic 2 status, 2026-08-18: closed.** `uv run pytest` is 41/41 green (all screening/rubric
+tests run against a mocked Claude client — free, no live calls). `scripts/golden_eval.py`
+(not part of `pytest`, opt-in, real spend) — 3 fabricated synthetic profiles, all landed in
+their expected recommendation band. Anthropic key now lives in the Keychain the same way as
+the Lever key (`security add-generic-password`, service `anthropic-api-key`).
 
 ---
 

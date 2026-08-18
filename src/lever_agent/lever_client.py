@@ -87,6 +87,19 @@ class LeverClient:
         response.raise_for_status()
         return response.json()
 
+    @retry(
+        retry=retry_if_exception(_is_retryable),
+        wait=wait_exponential_jitter(initial=1, max=30),
+        stop=stop_after_attempt(6),
+        reraise=True,
+    )
+    async def _get_bytes(self, path: str) -> bytes:
+        """Like `_get`, but for endpoints that return a raw file, not JSON."""
+        async with self._semaphore:
+            response = await self._client.get(path)
+        response.raise_for_status()
+        return response.content
+
     async def list_paginated(
         self, path: str, params: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
@@ -142,6 +155,30 @@ class LeverClient:
         """
         response = await self._get("disposition_stages")
         return response["data"]
+
+    async def get_resumes(self, opportunity_id: str) -> list[dict[str, Any]]:
+        """Resume metadata for one opportunity — NOT the file bytes (T2.2).
+
+        `GET /opportunities/:id/resumes` is not a paginated list endpoint here
+        (small, unpaginated array), so this reads `data` directly rather than
+        going through `list_paginated`.
+        """
+        response = await self._get(f"opportunities/{opportunity_id}/resumes")
+        return response["data"]
+
+    async def download_resume_bytes(self, opportunity_id: str, resume_id: str) -> bytes:
+        """Raw PDF bytes for one resume (T2.2).
+
+        Live-verified 2026-08-18: the `file.downloadUrl` field returned by
+        `get_resumes()` points at `/v1/candidates/.../resumes/.../download`,
+        which 403s for this key (`ForbiddenError: no access to this endpoint`).
+        The path constructed here — `/v1/opportunities/:id/resumes/:resumeId/download`,
+        exactly as docs/PLAN.md T2.2 describes — works and returns raw
+        `application/pdf` bytes. Never follow `file.downloadUrl`.
+        """
+        return await self._get_bytes(
+            f"opportunities/{opportunity_id}/resumes/{resume_id}/download"
+        )
 
 
 def _is_mine(posting: dict[str, Any]) -> bool:

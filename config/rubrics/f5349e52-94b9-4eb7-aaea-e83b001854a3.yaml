@@ -1,0 +1,48 @@
+# Rubric for Staff Software Engineer — Identity & Access Management (Serbia).
+# Posting ID as filename, not a title slug — two of my three postings share this
+# exact title (Serbia vs Canada), so a title-based slug would collide.
+#
+# Criteria drawn from the real job description (pulled live 2026-08-18): IAM
+# platform strategy, OAuth2/OIDC depth, staff-level autonomy, cross-team
+# influence via RFCs/design docs, incident ownership, security/compliance.
+# Weights are a starting point — tune after seeing real verdicts.
+
+posting_id: f5349e52-94b9-4eb7-aaea-e83b001854a3
+posting_title: "Staff Software Engineer — Identity & Access Management (Serbia)"
+
+criteria:
+  - name: auth_protocol_depth
+    description: >
+      Depth with OAuth 2.0 / OIDC flows, token lifecycle (rotation, revocation,
+      expiry), and session management at scale.
+    weight: 0.30
+
+  - name: systems_architecture
+    description: >
+      Track record designing and evolving secure, high-scale authentication
+      infrastructure; architectural decision-making with org-wide ripple effects.
+    weight: 0.20
+
+  - name: staff_level_autonomy
+    description: >
+      Staff-level IC scope: operates with significant autonomy, raises the bar
+      through mentorship/tooling/documentation without needing a management title.
+    weight: 0.15
+
+  - name: cross_team_influence
+    description: >
+      Builds buy-in across engineering and security stakeholders; writes RFCs
+      and design docs that stand on their own without the author in the room.
+    weight: 0.15
+
+  - name: incident_ownership
+    description: >
+      Comfortable being the escalation point for hard production IAM issues;
+      calm under pressure, stays engaged until resolution.
+    weight: 0.10
+
+  - name: security_compliance_mindset
+    description: >
+      Evaluates auth/session design against security and compliance
+      requirements, not just functional correctness.
+    weight: 0.10

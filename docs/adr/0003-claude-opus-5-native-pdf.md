@@ -1,6 +1,15 @@
 # ADR-0003 — Claude Opus 5, native PDF input, structured outputs
 
-**Status:** accepted · **Date:** 2026-08-18
+**Status:** accepted, model choice amended · **Date:** 2026-08-18
+
+> **Amendment, 2026-08-18:** default model changed to `claude-sonnet-5`. This ADR's own
+> "Alternatives rejected" table called this "a cost decision to take deliberately, not a
+> default" — that deliberate call was made explicitly this session. Native PDF input,
+> structured outputs, and prompt caching below are unaffected and apply the same way to
+> Sonnet 5 (verified live: `temperature`/`top_p` are rejected on Sonnet 5 exactly as on Opus 5).
+> `score_resume()` in `src/lever_agent/screening.py` takes `model` as a parameter defaulting to
+> Sonnet 5, so a specific cohort can still be escalated to Opus 5 with `--model claude-opus-5`
+> on `lever screen` without a code change.
 
 ## Context
 
@@ -26,9 +35,12 @@ defend against.
 
 ## Decision
 
-**Model: `claude-opus-5`.** Screening a candidate against a rubric is a judgment task where
-a wrong answer wastes an interview slot or loses a good candidate. $5/M input and $25/M
-output is the right trade for that.
+**Model: `claude-sonnet-5`** (amended 2026-08-18; originally `claude-opus-5` — see the
+amendment note above). Screening a candidate against a rubric is a judgment task, but at
+83–203 active candidates per posting the per-cohort cost difference between Sonnet 5 and
+Opus 5 is real, and this was made a deliberate, explicit cost decision rather than a
+default. `score_resume()` accepts a `model` override per call for escalating a specific
+cohort back to Opus 5 if quality ever demands it.
 
 **Resume delivery: the PDF straight from Lever into a `document` content block.** Download
 via `GET /v1/opportunities/:id/resumes/:id/download`, base64 it, send it. No text extraction.
@@ -38,12 +50,18 @@ evidence quote for each, and an overall recommendation.
 
 **Prompt caching** with `cache_control` on the rubric and system prompt. The minimum
 cacheable prefix on Opus 5 is 512 tokens, so a rubric of any substance caches; screening a
-cohort then pays for it once instead of per candidate.
+cohort then pays for it once instead of per candidate. (Not yet independently re-verified for
+Sonnet 5's minimum — the real 6-criterion IAM rubric is comfortably longer than either
+model's threshold, so this hasn't mattered in practice; `usage.cache_read_input_tokens`
+non-zero from candidate 2 on is the actual test, per T2.4.)
 
-Two further notes on Opus 5 that affect the code: thinking is **on by default** (omitting the
-`thinking` parameter runs adaptive), and `max_tokens` caps thinking *plus* response text — so
-`max_tokens` needs headroom or verdicts truncate. `temperature`, `top_p`, and `budget_tokens`
-are rejected outright; behavior gets steered by prompt and by `output_config.effort`.
+Two further notes that affect the code: `temperature`, `top_p`, and `budget_tokens` are
+rejected outright on both Opus 5 and Sonnet 5 (verified live for both) — behavior gets
+steered by prompt and by `output_config.effort` instead. Opus 5 runs adaptive thinking **on
+by default**; live-checked 2026-08-18 that Sonnet 5 does **not** turn thinking on for a
+simple prompt (0 `thinking_tokens`), though it may still do so adaptively for a harder one.
+Either way `max_tokens` caps thinking *plus* response text, so it needs headroom regardless
+of which model is in play.
 
 ## Consequences
 
@@ -69,4 +87,4 @@ comes before reintroducing text extraction.
 |---|---|
 | `pdfplumber` + text prompt | An extraction step that native PDF input makes unnecessary; loses layout and figures; `pdfplumber` is thinly maintained |
 | Tool-use for the verdict | Works, but `messages.parse()` is the purpose-built path and returns a typed object directly |
-| `claude-sonnet-5` to save cost | Reasonable for high volume, but this is a judgment call where a wrong answer is expensive. Downgrading is a cost decision to take deliberately, not a default |
+| ~~`claude-sonnet-5` to save cost~~ | **Adopted 2026-08-18** — see the amendment note at the top. Originally rejected here as "a cost decision to take deliberately, not a default"; that deliberate decision was then made explicitly |

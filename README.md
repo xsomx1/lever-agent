@@ -9,9 +9,11 @@ Not a shared service, not a platform. A tool I run.
 
 Epic 0 (bootstrap) and Epic 1 (pipeline hygiene / digest) are done. `uv run lever digest`
 flags stale candidates by per-stage SLA, flags unhealthy postings, and shows day-over-day
-movement — verified against production Lever. T0.7 (who owns the "AI Screened" stage) is
-still open, waiting on Thomas Hansen; it only has to land before Epic 3. The `launchd`
-schedule for the digest is authored but not activated yet. Epic 2 (screening) is next.
+movement — verified against production Lever. The digest now also runs on its own: a
+`launchd` LaunchAgent fires it Mon–Fri at 08:00, writing to
+`~/Library/Logs/lever-agent/digest-<date>.log`. T0.7 (who owns the "AI Screened" stage) is
+still open, waiting on Thomas Hansen; it only has to land before Epic 3. Epic 2 (screening)
+is next.
 
 Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
 branch: `feature/lever-automation-agent`

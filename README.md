@@ -32,6 +32,7 @@ branch: `feature/lever-automation-agent`
 | [0002](docs/adr/0002-human-in-the-loop.md) | Human-in-the-loop on the reject and hire gates |
 | [0003](docs/adr/0003-claude-opus-5-native-pdf.md) | Claude Opus 5 with native PDF input and structured outputs — no text-extraction library |
 | [0004](docs/adr/0004-local-state-sqlite.md) | Local SQLite for state; no candidate PII persisted |
+| [0005](docs/adr/0005-postings-mine-includes-hiring-manager.md) | "My postings" also includes postings where I'm the hiring manager, not just owner/follower |
 
 ## What it will do
 
@@ -42,7 +43,8 @@ published postings that should have been closed. A digest I can read in the morn
 against that posting's rubric with Claude, and rank. The score goes back into Lever as a
 note; stage moves need my confirmation.
 
-**Scoped to my own hiring** — postings where I'm the owner or a follower, not all 185.
+**Scoped to my own hiring** — postings where I'm the owner, a follower, or the hiring manager
+(ADR-0005), not all 185.
 
 ## Access
 

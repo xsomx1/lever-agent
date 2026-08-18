@@ -107,14 +107,14 @@ class LeverClient:
             request_params["offset"] = page["next"]
 
     async def get_my_postings(self) -> list[dict[str, Any]]:
-        """Postings where I'm the owner or a follower (T0.5).
+        """Postings where I'm the owner, a follower, or the hiring manager (T0.5, ADR-0005).
 
         `state=published` alone omits internal-jobsite postings, so both
         distribution channels are requested explicitly. `confidentiality` is
         left off entirely — this key has no confidential-data access.
         """
         params = {
-            "expand": ["owner", "followers"],
+            "expand": ["owner", "followers", "hiringManager"],
             "distributionChannel": ["public", "internal"],
         }
         postings = [p async for p in self.list_paginated("postings", params)]
@@ -145,10 +145,19 @@ class LeverClient:
 
 
 def _is_mine(posting: dict[str, Any]) -> bool:
+    """Owner, follower, or hiring manager — see ADR-0005.
+
+    `hiringManager` is a plain UID string unless `expand=hiringManager` was
+    requested, in which case it comes back as a user object like `owner` and
+    `followers` — handle both shapes since callers may not always expand it.
+    """
     owner = posting.get("owner")
     if isinstance(owner, dict) and owner.get("id") == MY_LEVER_UID:
         return True
     for follower in posting.get("followers") or []:
         if isinstance(follower, dict) and follower.get("id") == MY_LEVER_UID:
             return True
-    return False
+    hiring_manager = posting.get("hiringManager")
+    if isinstance(hiring_manager, dict):
+        return hiring_manager.get("id") == MY_LEVER_UID
+    return hiring_manager == MY_LEVER_UID

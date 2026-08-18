@@ -1,0 +1,26 @@
+# Secrets — the Lever key lives in the macOS Keychain, never here
+.env
+.env.*
+*.pem
+*.key
+
+# Local state — may reference candidates; never commit
+*.db
+*.sqlite
+*.sqlite3
+state/
+snapshots/
+
+# Never commit candidate data
+resumes/
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+.DS_Store

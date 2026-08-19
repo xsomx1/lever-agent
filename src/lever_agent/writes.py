@@ -12,14 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from lever_agent.audit_log import AuditLog, AuditLogEntry
-from lever_agent.config import AI_SCREENED_STAGE_ID, SCREENING_TAG
+from lever_agent.config import SCREENING_TAG
 from lever_agent.lever_client import LeverClient
 from lever_agent.rubric import Rubric
 from lever_agent.screening import CandidateScore
-
-
-class AIScreenedStageBlockedError(RuntimeError):
-    """Refused: T0.7 (who else writes to "AI Screened") is still unanswered."""
 
 
 @dataclass
@@ -146,15 +142,13 @@ async def advance_stage(
     dry_run: bool = False,
 ) -> WriteResult:
     """T3.3. Callers (the CLI) are responsible for the interactive confirmation
-    prompt in the real (non-dry-run) path — this function only enforces the
-    hard AI-Screened block, unconditionally, before any network call.
-    """
-    if target_stage_id == AI_SCREENED_STAGE_ID:
-        raise AIScreenedStageBlockedError(
-            "Refusing to move a candidate into the 'AI Screened' stage — "
-            "T0.7 (who else writes to it) is still unanswered. See docs/PLAN.md T0.7."
-        )
+    prompt in the real (non-dry-run) path.
 
+    The former hard block on "AI Screened" (config.AI_SCREENED_STAGE_ID) was
+    lifted 2026-08-18 once T0.7 was answered: no vendor/marketplace integration
+    owns that stage — it's just used manually by some HR/hiring managers. See
+    docs/CONTEXT.md §8 and docs/PLAN.md T0.7.
+    """
     success = True
     if not dry_run:
         try:

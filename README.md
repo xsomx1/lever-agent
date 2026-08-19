@@ -14,11 +14,13 @@ movement, on its own schedule (`launchd`, Mon–Fri 11:00 MSK). `uv run lever sc
 (`claude-sonnet-5` by default — a deliberate cost decision, see
 [ADR-0003](docs/adr/0003-claude-opus-5-native-pdf.md)'s amendment) and, with `--post-notes`,
 writes the score back to Lever as a note plus a `screened` tag. `lever advance` moves a
-candidate's stage with an interactive confirmation and a hard block on the "AI Screened"
-stage — live-verified with a real round-trip move (`New applicant` →
-`Recruiter Scheduling Interview` → `New applicant`). `lever audit` shows the local write
-history. T0.7 (who owns "AI Screened") is still open, waiting on Thomas Hansen, but blocks
-nothing shipped — "AI Screened" itself just stays hard-blocked as a target.
+candidate's stage with an interactive confirmation — live-verified with a real round-trip
+move (`New applicant` → `Recruiter Scheduling Interview` → `New applicant`). `lever audit`
+shows the local write history. T0.7 is answered: Thomas Hansen confirmed no vendor
+integration owns "AI Screened" (the `screened.io` hypothesis was ruled out) — it's used
+manually by some HR/hiring managers, so it's now an ordinary stage-move target like any
+other. Every task through Epic 3 is closed. Epic 4 (interview scheduling) is next, if it
+turns out to be worth building at all — its own T4.1 has to check first.
 
 Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
 branch: `feature/lever-automation-agent`

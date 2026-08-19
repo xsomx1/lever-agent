@@ -37,7 +37,6 @@ from lever_agent.snapshot_store import (
 )
 from lever_agent.stages import get_stage_lookup, stage_name
 from lever_agent.writes import (
-    AIScreenedStageBlockedError,
     advance_stage,
     build_note_text,
     write_note,
@@ -407,14 +406,10 @@ async def _advance(
 
         now_ms = int(time.time() * 1000)
         with AuditLog() as audit:
-            try:
-                result = await advance_stage(
-                    client, audit, posting_id, opportunity_id, target_stage_id, target_stage_text,
-                    now_ms=now_ms, dry_run=dry_run,
-                )
-            except AIScreenedStageBlockedError as exc:
-                console.print(f"[red]{exc}[/red]")
-                raise typer.Exit(code=1) from None
+            result = await advance_stage(
+                client, audit, posting_id, opportunity_id, target_stage_id, target_stage_text,
+                now_ms=now_ms, dry_run=dry_run,
+            )
 
         if dry_run:
             console.print(f"[dim]would PUT stage for {opportunity_id}: {result.would_send}[/dim]")

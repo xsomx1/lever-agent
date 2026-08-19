@@ -1,8 +1,8 @@
 """Write paths (T3.1-T3.4) — mocked httpx via respx, no real Lever calls, free.
 
 Covers: dry-run never touches the network, real writes send the right
-perform_as + body, the AI-Screened stage is blocked unconditionally, and every
-path — dry-run or real, success or failure — lands in the audit log.
+perform_as + body, and every path — dry-run or real, success or failure —
+lands in the audit log.
 """
 
 import httpx
@@ -15,7 +15,6 @@ from lever_agent.lever_client import LeverClient
 from lever_agent.rubric import Rubric
 from lever_agent.screening import CandidateScore, ScreeningVerdict
 from lever_agent.writes import (
-    AIScreenedStageBlockedError,
     advance_stage,
     build_note_text,
     write_note,
@@ -168,15 +167,20 @@ async def test_advance_stage_real_sends_perform_as_and_body(tmp_path):
 
 
 @respx.mock
-async def test_advance_stage_blocks_ai_screened_target_dry_run_and_real(tmp_path):
-    route = respx.put("https://api.lever.co/v1/opportunities/opp-1/stage")
+async def test_advance_stage_to_ai_screened_is_allowed(tmp_path):
+    """T0.7 answered 2026-08-18 (Thomas Hansen): no vendor integration owns
+    "AI Screened" — it's just used manually by some HR/hiring managers. The
+    former hard block on this stage as a target was lifted; it's now an
+    ordinary stage move like any other.
+    """
+    route = respx.put("https://api.lever.co/v1/opportunities/opp-1/stage").mock(
+        return_value=httpx.Response(200, json={"data": {}})
+    )
     audit = AuditLog(tmp_path / "t.db")
     async with LeverClient(api_key="fake-key") as client:
-        for dry_run in (True, False):
-            with pytest.raises(AIScreenedStageBlockedError, match="T0.7"):
-                await advance_stage(
-                    client, audit, "post-1", "opp-1", AI_SCREENED_STAGE_ID, "AI Screened",
-                    now_ms=NOW_MS, dry_run=dry_run,
-                )
+        result = await advance_stage(
+            client, audit, "post-1", "opp-1", AI_SCREENED_STAGE_ID, "AI Screened", now_ms=NOW_MS
+        )
 
-    assert route.call_count == 0
+    assert route.called
+    assert result.detail == "AI Screened"

@@ -26,6 +26,8 @@ ANTHROPIC_KEYCHAIN_SERVICE = "anthropic-api-key"
 # silently mint a new tag rather than reusing this one (docs/CONTEXT.md §3.4).
 SCREENING_TAG = "screened"
 
-# "AI Screened" stage — hard-blocked as a stage-move target until T0.7
-# (who else writes to it) is answered. See docs/PLAN.md T0.7 and T3.3.
+# "AI Screened" stage. Was hard-blocked as a stage-move target pending T0.7;
+# answered 2026-08-18 (Thomas Hansen) — no vendor/marketplace integration owns
+# it, just manual use by some HR/hiring managers — so the block was lifted.
+# See docs/CONTEXT.md §8 and docs/PLAN.md T0.7.
 AI_SCREENED_STAGE_ID = "011016a8-16d0-44f4-b95e-1af10019606f"

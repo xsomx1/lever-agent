@@ -319,12 +319,16 @@ answers matter when a question comes up.
 
 ## 8. Open unknowns
 
-1. **What writes to the "AI Screened" stage** — the one that could actually cause damage.
-   Hypothesis: `screened.io`, a Lever marketplace product documented in AI1 page 23732617239
-   as syncing postings and resumes out of Lever, evaluating, and **writing the evaluation back
-   to the candidate profile**. The stage name is an exact match, and nothing in
-   `neuronet-automations` or `mini-apps` writes to it. **If a vendor integration owns that
-   stage, anything this agent writes there will collide.** Resolve before Epic 3 (task T0.7).
+1. ~~**What writes to the "AI Screened" stage**~~ — **Answered 2026-08-18 by Thomas Hansen**
+   (Slack DM, asked 2026-08-18): **no vendor/marketplace integration owns this stage.** The
+   `screened.io` hypothesis (a Lever marketplace product documented in AI1 page 23732617239
+   as syncing postings/resumes out of Lever and writing evaluations back) is **ruled out** —
+   Thomas confirmed it isn't connected. The stage is used **manually** by some HR staff and
+   hiring managers; Thomas himself doesn't use it. Consequence: the collision risk this task
+   existed to check was a system/integration one, and there is none — so the hard block on
+   "AI Screened" as a stage-move target in `writes.py::advance_stage` was lifted 2026-08-18.
+   It's now an ordinary stage move like any other, subject to the same one-at-a-time,
+   explicit-confirmation, `--dry-run`-available discipline as every other target.
 2. **No Lever sandbox.** `api.sandbox.lever.co` exists but accounts go only to approved
    integration partners, and no reference to an Xsolla sandbox was found anywhere. **All
    testing runs against production** — hence `--dry-run` on every write path.

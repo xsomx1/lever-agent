@@ -74,16 +74,15 @@ build reaches it.
 | **T0.4** | ✅ **Done 2026-08-18.** Lever user UID is `a245ada8-57eb-4bf7-8354-4635c02627d4` — the standing `perform_as`. Just put it in config | ✅ `MY_LEVER_UID` in `src/lever_agent/config.py` |
 | **T0.5** | Identify my postings: `GET /v1/postings` with `expand=owner&expand=followers&expand=hiringManager`, filter to owner/follower/hiring-manager (ADR-0005). `state=published` alone omits internal-jobsite postings — also pass `distributionChannel=public&distributionChannel=internal`. **Do not pass `confidentiality`** (see prerequisites) | ✅ **Done 2026-08-18, extended 2026-08-18 (ADR-0005).** `LeverClient.get_my_postings()` + `uv run lever postings mine` — returns my 3 real postings against production Lever; filter now also catches postings owned by someone else where I'm the hiring manager (none exist today, but the gap is closed) |
 | **T0.6** | Lever client module: async `httpx`, `asyncio.Semaphore(10)` for the 10 req/s limit, `tenacity` retry with jittered backoff (429 carries no `Retry-After`), cursor pagination on `hasNext`/`next`. Write it fresh from the public docs — do **not** copy the internal `lever-deep-sync` client into a personal repo | ✅ **Done 2026-08-18.** `src/lever_agent/lever_client.py`, written fresh from the public docs; unit-tested for pagination, `distributionChannel`, and the `confidentiality` guard |
-| **T0.7** | Establish what writes to the **"AI Screened"** stage before Epic 3 touches any stage. Likely the `screened.io` marketplace integration — if a vendor owns it, my writes would collide. Check Lever admin → Integrations, or ask Thomas Hansen | ⏳ **Asked 2026-08-18.** Slack DM sent to Thomas Hansen (`U08C4HEFB52`) — awaiting his answer. Update `CONTEXT.md` §8 once he replies |
+| **T0.7** | Establish what writes to the **"AI Screened"** stage before Epic 3 touches any stage. Likely the `screened.io` marketplace integration — if a vendor owns it, my writes would collide. Check Lever admin → Integrations, or ask Thomas Hansen | ✅ **Answered 2026-08-18.** Thomas Hansen: no vendor/marketplace integration owns it (`screened.io` hypothesis ruled out) — used manually by some HR/hiring managers, not by Thomas himself. Written up in `CONTEXT.md` §8; the "AI Screened" hard block in `writes.py` was lifted the same day |
 
 **Testing:** unit tests for cursor pagination and for the `distributionChannel` default. Add a
 guard test asserting the client **never** emits a `confidentiality` parameter — this key 403s on
 it, so a stray one fails the request outright rather than degrading. Nothing more.
 
-**Epic 0 status, 2026-08-18: closed except T0.7.** `uv run pytest` is 7/7 green
-(`tests/test_pagination.py`, `tests/test_distribution_channel.py`,
-`tests/test_confidentiality_guard.py`). T0.7 is unblocked to run in parallel with Epic 1 — it
-only has to land before Epic 3.
+**Epic 0 status: fully closed** (T0.7 answered 2026-08-18, see below). `uv run pytest` was
+7/7 green at the time (`tests/test_pagination.py`, `tests/test_distribution_channel.py`,
+`tests/test_confidentiality_guard.py`).
 
 ---
 
@@ -146,7 +145,7 @@ irreversible action stays behind my confirmation.
 |---|---|---|
 | **T3.1** | Post the score to Lever as a note (`POST /v1/opportunities/:id/notes`) with `perform_as` = me. Reversible, low blast radius, immediately useful. Notes created via the API can be edited via the API; notes made in the UI cannot | ✅ **Done 2026-08-18.** `create_note()` in `lever_client.py`, body `{"value": text}` — worked on the first live attempt (no schema iteration needed). `lever screen <posting_id> --post-notes`. One real write made and verified: Omar Khan (`4a6a14de-9981-47ad-9f28-792563515b8c`) |
 | **T3.2** | Tag screened candidates (`addTags`). Careful: tags are free-text, case-sensitive, and auto-created — a typo makes a new tag. Use a fixed constant | ✅ **Done 2026-08-18.** `config.SCREENING_TAG = "screened"`, checked live against `GET /tags` (1000+ existing tags) first — no collision. `add_tags()`, `--tag` / `--post-notes` on `lever screen` |
-| **T3.3** | Stage moves (`PUT /v1/opportunities/:id/stage`) only on explicit confirmation, one candidate at a time, never batched, never scheduled. **Do not write to "AI Screened"** until T0.7 settles who owns it | ✅ **Done 2026-08-18.** `lever advance <opportunity_id> <stage_name> --posting <id>` resolves human-readable stage names via the live `disposition_stages` lookup, prompts an interactive confirmation in real (non-dry-run) mode, and hard-blocks "AI Screened" as a target unconditionally (confirmed live: raises before any network call, no audit entry). **Real live stage move verified**: Omar Khan moved `New applicant` → `Recruiter Scheduling Interview` → `New applicant`, `perform_as` = me both times, Lever's state re-confirmed via a fresh read after each move, both moves in the audit log |
+| **T3.3** | Stage moves (`PUT /v1/opportunities/:id/stage`) only on explicit confirmation, one candidate at a time, never batched, never scheduled. **Do not write to "AI Screened"** until T0.7 settles who owns it | ✅ **Done 2026-08-18.** `lever advance <opportunity_id> <stage_name> --posting <id>` resolves human-readable stage names via the live `disposition_stages` lookup and prompts an interactive confirmation in real (non-dry-run) mode. **Real live stage move verified**: Omar Khan moved `New applicant` → `Recruiter Scheduling Interview` → `New applicant`, `perform_as` = me both times, Lever's state re-confirmed via a fresh read after each move, both moves in the audit log. The "AI Screened" hard block (in place while T0.7 was open) was **lifted 2026-08-18** once Thomas Hansen answered — "AI Screened" is now an ordinary stage-move target, same discipline as any other |
 | **T3.4** | Local audit log: what changed, when, and the score it was based on. Every write gets a `--dry-run` that logs the intended call without sending it | ✅ **Done 2026-08-18.** `audit_log.py` (`state/lever_agent.db`, PII-free — stage IDs/tag names/scores only), `lever audit` viewer. Verified live: dry-run and real writes both logged correctly, including the blocked AI-Screened attempt (which logs nothing, by design — it never reaches the write functions) |
 
 **Never:** automated rejection, automated hire, or any email to a candidate. No such function
@@ -155,9 +154,9 @@ exists anywhere in `src/lever_agent/writes.py`.
 **Epic 3 status, 2026-08-18: fully closed.** All four tasks live-verified against production
 Lever: a real note + `screened` tag on Omar Khan (T3.1/T3.2), a real round-trip stage move
 (`New applicant` → `Recruiter Scheduling Interview` → `New applicant`, T3.3), and every one of
-those writes correctly in the local audit log (T3.4). `uv run pytest` is 53/53 green.
-T0.7 remains open but gates nothing that's shipped — it only continues to block "AI Screened"
-as a stage-move target, which stays hard-blocked in code.
+those writes correctly in the local audit log (T3.4). `uv run pytest` is 53/53 green. T0.7 was
+answered the same day (see T0.7 above and `CONTEXT.md` §8) — the "AI Screened" hard block was
+lifted accordingly.
 
 ---
 
@@ -204,7 +203,7 @@ Wave 4   Write-back       T3.1 … T3.4      ── notes first, stage moves las
          ↓
 Wave 5   Optional         T4.x  T5.x       ── only if they earn their keep
 
-         T0.7  ────────────────────────────── in parallel from day one; gates Wave 4
+         T0.7  ────────────────────────── ✅ answered 2026-08-18 (Thomas Hansen), before Wave 4 closed
 ```
 
 **Digest before screening**, decided 2026-08-18. The two epics are technically independent, but
@@ -214,8 +213,8 @@ data with nothing at risk. Screening then lands on a client that is already know
 rather than debugging both layers at once. It also means Wave 1 and Wave 2 need no Anthropic
 credential, so the build can start before that access is sorted.
 
-T0.7 (who owns the "AI Screened" stage) sits outside the waves because it waits on a person.
-Ask at the start; it only has to be answered before Wave 4.
+T0.7 (who owns the "AI Screened" stage) sat outside the waves because it waited on a person —
+answered 2026-08-18 by Thomas Hansen (no vendor integration owns it), before Wave 4 closed.
 
 Full testing at the close of each epic; this document and `CONTEXT.md` get updated as tasks land.
 

@@ -1,0 +1,70 @@
+# Rubric for Staff Software Engineer Smart Wallet & Account Abstraction (Canada).
+# Posting ID as filename — this title is open in two locations (Canada, Russia),
+# both carry the identical job description and share these criteria.
+#
+# Criteria drawn from the real job description (pulled live 2026-10-17): ERC-4337 /
+# EIP-7702 depth, production crypto track record with value at risk, Solidity/EVM/L2,
+# wallet security and key management, Go/TS backend, staff-level cross-team leadership.
+# Nice-to-haves (zkSync, AA vendors, MPC custody, gaming, mobile wallet) are folded
+# into the relevant criterion as bonus signal, not scored separately.
+# Weights are a starting point — tune after seeing real verdicts.
+
+posting_id: 7b2bc041-2783-4922-b2b1-07cb5326102d
+posting_title: "Staff Software Engineer Smart Wallet & Account Abstraction (Canada)"
+
+criteria:
+  - name: account_abstraction_depth
+    description: >
+      Deep hands-on ERC-4337 (EntryPoint v0.6-v0.8, UserOperation lifecycle, bundlers,
+      paymasters, ERC-7562 validation rules, counterfactual deployment, ERC-6492),
+      EIP-7702 delegation, production smart account implementations (Safe, Kernel,
+      Biconomy, Coinbase Smart Wallet; ERC-7579/6900 modular accounts), session keys and
+      delegated permissions (ERC-7710/7715), signature schemes (EIP-712, ERC-1271,
+      WebAuthn/passkey P-256) and wallet interfaces (EIP-1193, EIP-6963, EIP-5792,
+      ERC-7677). Bonus: AA vendor experience (Pimlico, ZeroDev, Alchemy, Privy, thirdweb,
+      Turnkey) or ERC/EIP authorship. Generic "blockchain developer" without AA evidence
+      scores low.
+    weight: 0.25
+
+  - name: production_crypto_track_record
+    description: >
+      Substantial engineering at a major crypto product or protocol org (Coinbase,
+      Kraken, Base, Safe, Ethereum Foundation, Consensys/MetaMask) or a comparable wallet,
+      exchange, or AA-infrastructure team where wallet correctness and custody were core.
+      Has designed or operated a production wallet/AA system serving real users and real
+      value, where a bug meant lost funds — with concrete guardrails, reviews, rollback paths.
+    weight: 0.20
+
+  - name: smart_contracts_evm_l2
+    description: >
+      Can read, review, and write account, paymaster, and module contracts in Solidity;
+      gas-aware design; upgradeability and migration patterns; works with external
+      auditors. Understands L2 execution differences (native AA on zkSync-family chains,
+      fee models, finality/reorgs, RPC and indexer semantics). Bonus: zkSync / Elastic
+      Chain, NFT/token infra (ERC-721/1155/20, marketplaces, Merkle claims).
+    weight: 0.15
+
+  - name: wallet_security_key_management
+    description: >
+      Hands-on key material in production (Keychain/Keystore, HSMs, MPC/threshold
+      signing) and wallet threat modeling: signature and delegation phishing, malicious
+      dApp origins, replay and cross-chain replay, approval abuse, paymaster griefing/DoS.
+      Bonus: MPC custody, social/guardian/passkey recovery in a consumer product,
+      compliance exposure (KYC/AML, MiCA, SOC 2).
+    weight: 0.15
+
+  - name: backend_platform_engineering
+    description: >
+      Strong Go (idiomatic, concurrency, profiling); TypeScript SDK design that other
+      teams build on; distributed systems and reconciling off-chain state with on-chain
+      truth; PostgreSQL, Kubernetes, Kafka/NATS, CI/CD. Bonus: platform/infra engineering,
+      mobile wallet surface (React Native/Expo, WebView provider injection).
+    weight: 0.10
+
+  - name: staff_level_leadership
+    description: >
+      Staff-level IC scope: leads multi-quarter technical initiatives across teams,
+      influences architecture and standards beyond the immediate team, writes RFCs and
+      design docs people actually read, sets engineering standards, mentors, and serves
+      as escalation point for hard production issues. Bonus: gaming industry background.
+    weight: 0.15

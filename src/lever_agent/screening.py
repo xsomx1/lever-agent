@@ -104,12 +104,30 @@ def build_system_prompt(rubric: Rubric) -> str:
 
 
 async def fetch_resume_bytes(client: LeverClient, opportunity_id: str) -> bytes:
-    """The most recent resume's raw PDF bytes for one opportunity (T2.2)."""
+    """The most recent PDF resume's raw bytes for one opportunity (T2.2).
+
+    Live-verified 2026-10-17: a resume record can have `file: None` (a parsed
+    profile with no uploaded file); downloading it 400s with "this resume does
+    not include a file". Only records with a PDF file are candidates — the model
+    call sends the bytes as `application/pdf`.
+    """
     resumes = await client.get_resumes(opportunity_id)
     if not resumes:
         raise ValueError(f"opportunity {opportunity_id} has no resume on file")
-    most_recent = max(resumes, key=lambda r: r["createdAt"])
-    return await client.download_resume_bytes(opportunity_id, most_recent["id"])
+    with_pdf = [
+        r for r in resumes
+        if r.get("file") and (r["file"].get("ext") or "").lower() == ".pdf"
+    ]
+    if not with_pdf:
+        exts = sorted({(r.get("file") or {}).get("ext") or "no file" for r in resumes})
+        raise ValueError(f"no PDF resume on file (found: {', '.join(exts)})")
+    most_recent = max(with_pdf, key=lambda r: r["createdAt"])
+    data = await client.download_resume_bytes(opportunity_id, most_recent["id"])
+    # Live-verified 2026-10-17: a `.pdf` ext does not guarantee PDF bytes — the API
+    # 400s with "The PDF specified was not valid". Check the magic bytes instead.
+    if b"%PDF-" not in data[:1024]:
+        raise ValueError("resume file has a .pdf extension but is not a valid PDF")
+    return data
 
 
 def score_resume(

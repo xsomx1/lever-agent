@@ -7,8 +7,9 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
+import httpx
 import typer
-from anthropic import Anthropic
+from anthropic import Anthropic, APIError
 from rich.console import Console
 from rich.table import Table
 
@@ -284,6 +285,11 @@ async def _screen(
                 continue
             except ValueError as exc:
                 console.print(f"  [yellow]{opp.get('name', opp['id'])}: skipped — {exc}[/yellow]")
+                continue
+            except (APIError, httpx.HTTPError) as exc:
+                # One bad resume or a Lever/Anthropic error that outlived its retries
+                # must not throw away the rest of the cohort's (already paid) scores.
+                console.print(f"  [yellow]{opp.get('name', opp['id'])}: skipped — {type(exc).__name__}: {exc}[/yellow]")
                 continue
 
             cache_read_tokens_total += getattr(response.usage, "cache_read_input_tokens", 0) or 0

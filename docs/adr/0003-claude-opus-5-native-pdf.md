@@ -1,6 +1,6 @@
 # ADR-0003 — Claude Opus 5, native PDF input, structured outputs
 
-**Status:** accepted, model choice amended · **Date:** 2026-08-18
+**Status:** superseded by [ADR-0006](0006-openai-gpt-6-1-terra.md) (2026-11-12) · **Date:** 2026-08-18
 
 > **Amendment, 2026-08-18:** default model changed to `claude-sonnet-5`. This ADR's own
 > "Alternatives rejected" table called this "a cost decision to take deliberately, not a

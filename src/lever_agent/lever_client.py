@@ -43,6 +43,16 @@ def _is_retryable(exc: BaseException) -> bool:
     )
 
 
+def _is_retryable_read(exc: BaseException) -> bool:
+    """Reads also retry on timeouts/connection drops and any 5xx (live 2026-10-17:
+    a single ReadTimeout aborted a 73-candidate screen, and a 502 Bad Gateway
+    aborted two 200+ candidate screens). Writes don't — a timed-out or 5xx'd POST
+    may have landed, and retrying it would duplicate the note."""
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500:
+        return True
+    return _is_retryable(exc) or isinstance(exc, httpx.TransportError)
+
+
 class LeverClient:
     """Thin async wrapper around the Lever REST API.
 
@@ -69,7 +79,7 @@ class LeverClient:
         await self._client.aclose()
 
     @retry(
-        retry=retry_if_exception(_is_retryable),
+        retry=retry_if_exception(_is_retryable_read),
         wait=wait_exponential_jitter(initial=1, max=30),
         stop=stop_after_attempt(6),
         reraise=True,
@@ -88,7 +98,7 @@ class LeverClient:
         return response.json()
 
     @retry(
-        retry=retry_if_exception(_is_retryable),
+        retry=retry_if_exception(_is_retryable_read),
         wait=wait_exponential_jitter(initial=1, max=30),
         stop=stop_after_attempt(6),
         reraise=True,

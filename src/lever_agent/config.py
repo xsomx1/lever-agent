@@ -16,8 +16,8 @@ LEVER_RATE_LIMIT = 10
 # Keychain lookup for the API key — never a .env file, never a shell-exported var.
 KEYCHAIN_SERVICE = "lever-api-key"
 
-# Same convention for the Anthropic key, needed from Epic 2 on.
-ANTHROPIC_KEYCHAIN_SERVICE = "anthropic-api-key"
+# Same convention for the OpenAI key used by screening (ADR-0006).
+OPENAI_KEYCHAIN_SERVICE = "openai-api-key"
 
 # Epic 3 — writing back to Lever.
 

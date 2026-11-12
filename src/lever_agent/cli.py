@@ -7,14 +7,15 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
+import httpx
 import typer
-from anthropic import Anthropic
+from openai import APIError, OpenAI
 from rich.console import Console
 from rich.table import Table
 
 from lever_agent.audit_log import AuditLog
 from lever_agent.digest import build_digest
-from lever_agent.keychain import get_anthropic_api_key, get_lever_api_key
+from lever_agent.keychain import get_lever_api_key, get_openai_api_key
 from lever_agent.lever_client import LeverClient
 from lever_agent.pipeline_config import load_pipeline_config
 from lever_agent.rubric import load_rubric
@@ -214,7 +215,7 @@ def screen(
         None, "--detail", help="Opportunity ID to show the full per-criterion breakdown for"
     ),
     model: str = typer.Option(
-        SCREENING_MODEL, "--model", help="Anthropic model to screen with (default: sonnet-5, a deliberate cost choice)"
+        SCREENING_MODEL, "--model", help="OpenAI model to screen with (default: gpt-6.1-terra, a deliberate cost choice — ADR-0006)"
     ),
     post_notes: bool = typer.Option(
         False, "--post-notes", help="Write a note + the 'screened' tag to Lever for each candidate screened (T3.1/T3.2)"
@@ -229,7 +230,7 @@ def screen(
         None, "--opportunity", help="Screen only this one opportunity ID, ignoring --limit/--all"
     ),
 ) -> None:
-    """Screen a posting's candidates against its rubric with Claude (Epic 2)."""
+    """Screen a posting's candidates against its rubric with OpenAI (Epic 2, ADR-0006)."""
     console = Console()
     asyncio.run(
         _screen(console, posting_id, limit, all_candidates, detail, model, post_notes, tag_only, dry_run, opportunity)
@@ -255,7 +256,7 @@ async def _screen(
         raise typer.Exit(code=1) from None
 
     lever_key = get_lever_api_key()
-    anthropic_client = Anthropic(api_key=get_anthropic_api_key())
+    openai_client = OpenAI(api_key=get_openai_api_key())
 
     async with LeverClient(lever_key) as client:
         opportunities = await client.get_opportunities_for_posting(posting_id)
@@ -274,19 +275,27 @@ async def _screen(
         )
 
         scores: list[CandidateScore] = []
-        cache_read_tokens_total = 0
+        input_tokens_total = 0
+        output_tokens_total = 0
         for opp in to_screen:
             try:
                 resume_bytes = await fetch_resume_bytes(client, opp["id"])
-                verdict, response = score_resume(anthropic_client, rubric, resume_bytes, model=model)
+                verdict, response = score_resume(openai_client, rubric, resume_bytes, model=model)
             except ScreeningRefusalError as exc:
                 console.print(f"  [red]{opp.get('name', opp['id'])}: {exc}[/red]")
                 continue
             except ValueError as exc:
                 console.print(f"  [yellow]{opp.get('name', opp['id'])}: skipped — {exc}[/yellow]")
                 continue
+            except (APIError, httpx.HTTPError) as exc:
+                # One bad resume or a Lever/OpenAI error that outlived its retries
+                # must not throw away the rest of the cohort's (already paid) scores.
+                console.print(f"  [yellow]{opp.get('name', opp['id'])}: skipped — {type(exc).__name__}: {exc}[/yellow]")
+                continue
 
-            cache_read_tokens_total += getattr(response.usage, "cache_read_input_tokens", 0) or 0
+            usage = getattr(response, "usage", None)
+            input_tokens_total += getattr(usage, "input_tokens", 0) or 0
+            output_tokens_total += getattr(usage, "output_tokens", 0) or 0
             overall = compute_overall_score(rubric, verdict)
             score = CandidateScore(
                 opportunity_id=opp["id"],
@@ -335,10 +344,12 @@ async def _screen(
         )
 
     console.print(table)
-    if len(scores) > 1:
+    if scores:
+        # No prompt-cache line any more: the shared rubric prefix is below OpenAI's
+        # 1,024-token cache minimum (ADR-0006), so cached tokens stay at zero.
         console.print(
-            f"[dim]cache_read_input_tokens across this cohort: {cache_read_tokens_total} "
-            f"(non-zero from candidate 2 on confirms prompt caching is working, T2.4)[/dim]"
+            f"[dim]tokens across this cohort ({model}): "
+            f"input {input_tokens_total}, output {output_tokens_total}[/dim]"
         )
 
     if detail:

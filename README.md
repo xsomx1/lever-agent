@@ -10,9 +10,9 @@ Not a shared service, not a platform. A tool I run.
 Epic 0 (bootstrap), Epic 1 (digest), Epic 2 (screening), and Epic 3 (writing back) are done.
 `uv run lever digest` flags stale candidates and unhealthy postings and shows day-over-day
 movement, on its own schedule (`launchd`, Mon–Fri 11:00 MSK). `uv run lever screen
-<posting_id>` scores a candidate's resume against the posting's rubric with Claude
-(`claude-sonnet-5` by default — a deliberate cost decision, see
-[ADR-0003](docs/adr/0003-claude-opus-5-native-pdf.md)'s amendment) and, with `--post-notes`,
+<posting_id>` scores a candidate's resume against the posting's rubric with OpenAI
+(`gpt-6.1-terra` by default — a deliberate cost decision, see
+[ADR-0006](docs/adr/0006-openai-gpt-6-1-terra.md)) and, with `--post-notes`,
 writes the score back to Lever as a note plus a `screened` tag. `lever advance` moves a
 candidate's stage with an interactive confirmation — live-verified with a real round-trip
 move (`New applicant` → `Recruiter Scheduling Interview` → `New applicant`). `lever audit`
@@ -39,9 +39,10 @@ branch: `feature/lever-automation-agent`
 |---|---|
 | [0001](docs/adr/0001-standalone-personal-agent.md) | A standalone personal CLI, not n8n and not the corporate Cloud Run platform |
 | [0002](docs/adr/0002-human-in-the-loop.md) | Human-in-the-loop on the reject and hire gates |
-| [0003](docs/adr/0003-claude-opus-5-native-pdf.md) | Native PDF input and structured outputs — no text-extraction library. Default model amended 2026-08-18 to `claude-sonnet-5` (was Opus 5) as a deliberate cost decision |
+| ~~[0003](docs/adr/0003-claude-opus-5-native-pdf.md)~~ | **Superseded by 0006.** Native PDF input and structured outputs — no text-extraction library. Default model amended 2026-08-18 to `claude-sonnet-5` (was Opus 5) as a deliberate cost decision |
 | [0004](docs/adr/0004-local-state-sqlite.md) | Local SQLite for state; no candidate PII persisted |
 | [0005](docs/adr/0005-postings-mine-includes-hiring-manager.md) | "My postings" also includes postings where I'm the hiring manager, not just owner/follower |
+| [0006](docs/adr/0006-openai-gpt-6-1-terra.md) | Screening runs on OpenAI `gpt-6.1-terra` via the Responses API (`store=False`); Anthropic removed |
 
 ## What it will do
 
@@ -49,7 +50,7 @@ branch: `feature/lever-automation-agent`
 published postings that should have been closed. A digest I can read in the morning.
 
 **Screening** — pull the resume PDF for a candidate on one of my postings, score it against
-that posting's rubric with Claude, and rank the cohort (`uv run lever screen <posting_id>`).
+that posting's rubric with OpenAI, and rank the cohort (`uv run lever screen <posting_id>`).
 `--post-notes` writes the score back as a Lever note plus a `screened` tag.
 
 **Writing back** — `lever advance <opportunity_id> <stage>` moves one candidate at a time,

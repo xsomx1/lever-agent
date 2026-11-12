@@ -9,7 +9,7 @@ Not a shared service, not a platform. A tool I run.
 
 Epic 0 (bootstrap), Epic 1 (digest), Epic 2 (screening), and Epic 3 (writing back) are done.
 `uv run lever digest` flags stale candidates and unhealthy postings and shows day-over-day
-movement, on its own schedule (`launchd`, Mon–Fri 11:00 MSK). `uv run lever screen
+movement; a `launchd` schedule (Mon–Fri 11:00 MSK) ships in `scripts/` but is not loaded by default (see [docs/SETUP.md](docs/SETUP.md)). `uv run lever screen
 <posting_id>` scores a candidate's resume against the posting's rubric with OpenAI
 (`gpt-6.1-terra` by default — a deliberate cost decision, see
 [ADR-0006](docs/adr/0006-openai-gpt-6-1-terra.md)) and, with `--post-notes`,
@@ -29,9 +29,10 @@ branch: `feature/lever-automation-agent`
 
 | Document | What it is |
 |---|---|
+| [docs/SETUP.md](docs/SETUP.md) | Installing the agent on another Mac: tooling, keys, checks, the digest schedule |
 | [docs/PLAN.md](docs/PLAN.md) | Epics, tasks, roadmap, dependencies |
 | [docs/CONTEXT.md](docs/CONTEXT.md) | Lever API constraints, live pipeline, prior art, open unknowns |
-| [docs/adr/](docs/adr/) | The four decisions this rests on |
+| [docs/adr/](docs/adr/) | The decisions this rests on |
 
 ## The decisions
 

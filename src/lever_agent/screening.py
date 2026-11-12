@@ -1,4 +1,4 @@
-"""Resume screening against a posting's rubric with Claude (T2.2-T2.6).
+"""Resume screening against a posting's rubric with OpenAI (T2.2-T2.6, ADR-0006).
 
 Resume bytes and their base64 encoding live only in local variables here —
 never written to a file, logged, or passed to SnapshotStore (T2.6, ADR-0004).
@@ -9,15 +9,15 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 
-from anthropic import Anthropic
+from openai import OpenAI
 from pydantic import BaseModel, ConfigDict
 
 from lever_agent.lever_client import LeverClient
 from lever_agent.rubric import Rubric
 
-MODEL = "claude-sonnet-5"  # deliberate cost decision 2026-08-18, see ADR-0003's addendum
+MODEL = "gpt-6.1-terra"  # deliberate cost decision 2026-11-12, see ADR-0006
 SCORE_MAX = 10
-DEFAULT_MAX_TOKENS = 8000
+DEFAULT_MAX_OUTPUT_TOKENS = 8000  # caps reasoning + verdict together
 
 # Fixed thresholds on the computed (weighted, 0-10 scale) overall score.
 # Deliberately simple and reviewable — not something the model invents.
@@ -30,16 +30,15 @@ RECOMMENDATION_BANDS = [
 
 
 class ScreeningRefusalError(RuntimeError):
-    """Claude returned stop_reason == 'refusal' — do not trust `content`."""
+    """The model returned a refusal instead of a verdict — do not trust the output."""
 
 
 class CriterionVerdict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    score: int  # 0-10; the SDK strips numeric bounds from the schema, so the
-    # prompt is what actually constrains this, not a Field(ge=, le=) here
-    # (docs/CONTEXT.md §4).
+    score: int  # 0-10; constrained by the prompt, not a Field(ge=, le=) here —
+    # numeric bounds in structured-output schemas are not something to rely on.
     evidence_quote: str
     rationale: str
 
@@ -131,62 +130,67 @@ async def fetch_resume_bytes(client: LeverClient, opportunity_id: str) -> bytes:
 
 
 def score_resume(
-    anthropic_client: Anthropic,
+    openai_client: OpenAI,
     rubric: Rubric,
     resume_pdf_bytes: bytes,
     *,
     model: str = MODEL,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
 ) -> tuple[ScreeningVerdict, object]:
     """Score one resume against the rubric. Returns (verdict, raw response for usage/debugging).
 
     `resume_pdf_bytes` and its base64 form exist only as local variables in
-    this call — never persisted (T2.6). `model` defaults to sonnet-5 (a
-    deliberate cost decision, see ADR-0003's addendum) but can be overridden
-    per call, e.g. to escalate a borderline cohort to opus-5.
+    this call — never persisted (T2.6), and `store=False` keeps OpenAI from
+    retaining the response either (ADR-0004, ADR-0006). `model` defaults to
+    gpt-6.1-terra (a deliberate cost decision, see ADR-0006) but can be
+    overridden per call, e.g. to escalate a borderline cohort to gpt-6.1-sol.
     """
-    b64 = base64.b64encode(resume_pdf_bytes).decode("ascii")  # no newlines, per docs/CONTEXT.md §4
+    b64 = base64.b64encode(resume_pdf_bytes).decode("ascii")  # no newlines
 
-    system_prompt = build_system_prompt(rubric)
-    response = anthropic_client.messages.parse(
+    response = openai_client.responses.parse(
         model=model,
-        max_tokens=max_tokens,
-        system=[
-            {
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[
+        max_output_tokens=max_output_tokens,
+        instructions=build_system_prompt(rubric),
+        input=[
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": b64,
-                        },
+                        "type": "input_file",
+                        "filename": "resume.pdf",
+                        "file_data": f"data:application/pdf;base64,{b64}",
                     },
-                    {"type": "text", "text": "Score this candidate."},
+                    {"type": "input_text", "text": "Score this candidate."},
                 ],
             }
         ],
-        output_format=ScreeningVerdict,
+        text_format=ScreeningVerdict,
+        store=False,
     )
 
-    if response.stop_reason == "refusal":
+    if _has_refusal(response):
         raise ScreeningRefusalError(
-            "Claude returned stop_reason='refusal' — verdict content is not trustworthy"
+            "model returned a refusal — verdict content is not trustworthy"
         )
 
-    verdict = response.parsed_output
+    verdict = response.output_parsed
     if verdict is None:
-        raise ValueError("no parsed_output on the response despite output_format being set")
+        raise ValueError(
+            f"no parsed verdict on the response (status={getattr(response, 'status', '?')})"
+        )
 
     return verdict, response
+
+
+def _has_refusal(response: object) -> bool:
+    """A refusal arrives as a `refusal` content item inside a `message` output item."""
+    for item in getattr(response, "output", None) or []:
+        if getattr(item, "type", None) != "message":
+            continue
+        for part in getattr(item, "content", None) or []:
+            if getattr(part, "type", None) == "refusal":
+                return True
+    return False
 
 
 def rank_candidates(scores: list[CandidateScore]) -> list[CandidateScore]:

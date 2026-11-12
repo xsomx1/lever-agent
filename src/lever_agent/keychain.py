@@ -11,7 +11,7 @@ import getpass
 import os
 import subprocess
 
-from lever_agent.config import ANTHROPIC_KEYCHAIN_SERVICE, KEYCHAIN_SERVICE
+from lever_agent.config import KEYCHAIN_SERVICE, OPENAI_KEYCHAIN_SERVICE
 
 
 class KeychainReadError(RuntimeError):
@@ -54,6 +54,6 @@ def get_lever_api_key() -> str:
     return _read_keychain_secret(KEYCHAIN_SERVICE)
 
 
-def get_anthropic_api_key() -> str:
-    """Return the Anthropic API key stored in the macOS Keychain (Epic 2 prerequisite)."""
-    return _read_keychain_secret(ANTHROPIC_KEYCHAIN_SERVICE)
+def get_openai_api_key() -> str:
+    """Return the OpenAI API key stored in the macOS Keychain (ADR-0006)."""
+    return _read_keychain_secret(OPENAI_KEYCHAIN_SERVICE)

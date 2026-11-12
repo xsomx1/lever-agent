@@ -1,4 +1,4 @@
-"""Screening logic against a MOCKED Claude client — free, deterministic, no real spend.
+"""Screening logic against a MOCKED OpenAI client — free, deterministic, no real spend.
 
 Live sanity-checking against the real API is scripts/golden_eval.py, run by
 hand, not part of this suite.
@@ -85,32 +85,35 @@ def test_build_system_prompt_includes_all_criteria_and_weights():
     assert "0.4" in prompt
 
 
-def test_score_resume_sends_document_block_and_cache_control():
-    fake_client = MagicMock()
-    fake_response = SimpleNamespace(
-        stop_reason="end_turn",
-        parsed_output=_verdict(8, 6),
-        usage=SimpleNamespace(cache_read_input_tokens=0),
+def _response(parsed, *, refusal=False):
+    part = SimpleNamespace(type="refusal", refusal="no") if refusal else SimpleNamespace(type="output_text")
+    return SimpleNamespace(
+        status="completed",
+        output=[SimpleNamespace(type="reasoning"), SimpleNamespace(type="message", content=[part])],
+        output_parsed=parsed,
+        usage=SimpleNamespace(input_tokens=100, output_tokens=50),
     )
-    fake_client.messages.parse.return_value = fake_response
+
+
+def test_score_resume_sends_pdf_file_and_disables_storage():
+    fake_client = MagicMock()
+    fake_client.responses.parse.return_value = _response(_verdict(8, 6))
 
     verdict, response = score_resume(fake_client, RUBRIC, b"%PDF-fake")
 
     assert verdict.summary == "ok"
-    call_kwargs = fake_client.messages.parse.call_args.kwargs
-    assert call_kwargs["output_format"] is ScreeningVerdict
-    assert call_kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
-    document_block = call_kwargs["messages"][0]["content"][0]
-    assert document_block["type"] == "document"
-    assert document_block["source"]["media_type"] == "application/pdf"
-    assert "\n" not in document_block["source"]["data"]  # base64, no newlines
+    call_kwargs = fake_client.responses.parse.call_args.kwargs
+    assert call_kwargs["text_format"] is ScreeningVerdict
+    assert call_kwargs["store"] is False  # ADR-0004/0006: OpenAI must not retain the response
+    file_part = call_kwargs["input"][0]["content"][0]
+    assert file_part["type"] == "input_file"
+    assert file_part["file_data"].startswith("data:application/pdf;base64,")
+    assert "\n" not in file_part["file_data"]  # base64, no newlines
 
 
 def test_score_resume_raises_on_refusal():
     fake_client = MagicMock()
-    fake_client.messages.parse.return_value = SimpleNamespace(
-        stop_reason="refusal", parsed_output=None, usage=None
-    )
+    fake_client.responses.parse.return_value = _response(None, refusal=True)
 
     with pytest.raises(ScreeningRefusalError):
         score_resume(fake_client, RUBRIC, b"%PDF-fake")
@@ -119,9 +122,7 @@ def test_score_resume_raises_on_refusal():
 def test_score_resume_never_opens_a_file(monkeypatch):
     """T2.6: resume bytes must never touch disk."""
     fake_client = MagicMock()
-    fake_client.messages.parse.return_value = SimpleNamespace(
-        stop_reason="end_turn", parsed_output=_verdict(5, 5), usage=None
-    )
+    fake_client.responses.parse.return_value = _response(_verdict(5, 5))
 
     original_open = open
     calls = []

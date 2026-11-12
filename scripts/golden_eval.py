@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Golden-set sanity check for the screening rubric/prompt (T2.6's testing note).
 
-NOT part of `pytest` — this makes real Anthropic API calls and costs a small
+NOT part of `pytest` — this makes real OpenAI API calls and costs a small
 amount of real money. Run by hand:
 
     uv run python scripts/golden_eval.py
@@ -20,11 +20,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from anthropic import Anthropic  # noqa: E402
+from openai import OpenAI  # noqa: E402
 
-from lever_agent.keychain import get_anthropic_api_key  # noqa: E402
+from lever_agent.keychain import get_openai_api_key  # noqa: E402
 from lever_agent.rubric import load_rubric  # noqa: E402
-from lever_agent.screening import compute_overall_score, recommendation_band, score_resume  # noqa: E402
+from lever_agent.screening import MODEL, compute_overall_score, recommendation_band, score_resume  # noqa: E402
 
 POSTING_ID = "f5349e52-94b9-4eb7-aaea-e83b001854a3"  # Staff SWE — IAM (Serbia)
 
@@ -122,9 +122,9 @@ def _make_pdf(text: str) -> bytes:
 
 def main() -> None:
     rubric = load_rubric(POSTING_ID)
-    client = Anthropic(api_key=get_anthropic_api_key())
+    client = OpenAI(api_key=get_openai_api_key())
 
-    print(f"Golden-set eval against rubric: {rubric.posting_title}\n")
+    print(f"Golden-set eval against rubric: {rubric.posting_title} (model {MODEL})\n")
 
     failures = []
     for label, resume_text, expected_band in GOLDEN_SET:
@@ -135,10 +135,10 @@ def main() -> None:
         status = "OK" if actual_band == expected_band else "MISMATCH"
         if status == "MISMATCH":
             failures.append(label)
-        cache_read = getattr(response.usage, "cache_read_input_tokens", 0)
+        usage = response.usage
         print(
             f"[{status}] {label}: score={overall:.1f} band='{actual_band}' "
-            f"(expected '{expected_band}') cache_read_input_tokens={cache_read}"
+            f"(expected '{expected_band}') tokens in/out={usage.input_tokens}/{usage.output_tokens}"
         )
         print(f"    summary: {verdict.summary}")
 

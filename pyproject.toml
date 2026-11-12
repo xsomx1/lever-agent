@@ -5,13 +5,13 @@ description = "Personal Lever hiring agent — pipeline hygiene and first-pass s
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "anthropic>=0.40,<1.0",
     "httpx>=0.27,<0.30",
     "tenacity>=8.2,<10.0",
     "pydantic>=2.0,<3.0",
     "typer>=0.12,<1.0",
     "rich>=13.0,<14.0",
     "pyyaml>=6.0,<7.0",
+    "openai>=3.49,<4.0",
 ]
 
 [project.scripts]

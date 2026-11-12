@@ -190,6 +190,23 @@ which is real infrastructure for a personal tool.
 
 ---
 
+# Epic 6 — Migrate screening from Anthropic to OpenAI
+
+Decided 2026-11-12, see [ADR-0006](adr/0006-openai-gpt-6-1-terra.md). Branch
+`feature/openai-provider`. Full replacement, no provider layer; default model `gpt-6.1-terra`.
+
+| Task | Description | Done when |
+|---|---|---|
+| **T6.0** | Prerequisites: branch, OpenAI key in the Keychain (`openai-api-key`, Xsolla corporate org), `openai` SDK, ADR-0006 | ✅ **Done 2026-11-12.** Key verified (`GET /v1/models` 200, `gpt-6.1-terra` available); `openai` 3.49.0; one live `responses.parse` call on a synthetic PDF returned a valid `ScreeningVerdict` with `store=False` |
+| **T6.1** | `config.py` / `keychain.py`: `OPENAI_KEYCHAIN_SERVICE`, `get_openai_api_key()` | ✅ **Done 2026-11-12.** Anthropic key constant and getter removed |
+| **T6.2** | `screening.py`: `responses.parse` with `input_file`, `text_format`, `store=False`; refusal guard on the `refusal` content item; default model `gpt-6.1-terra` | ✅ **Done 2026-11-12.** `score_resume()` signature unchanged apart from the client type and `max_output_tokens`; one live call on a synthetic profile returned the expected band |
+| **T6.3** | `cli.py`: `OpenAI` client, `openai.APIError` in the per-candidate skip, `--model` help, report token usage | ✅ **Done 2026-11-12.** The cohort footer reports input/output tokens instead of cache reads — caching doesn't apply here (ADR-0006) |
+| **T6.4** | `scripts/golden_eval.py` on the OpenAI client; `tests/test_screening.py` mocks moved to `responses.parse`, plus an assert on `store=False` | ✅ **Done 2026-11-12.** `uv run pytest` 58/58 green; no new test files |
+| **T6.5** | Live check: `golden_eval.py` (3 synthetic profiles in band) and real candidates scored by Sonnet 5 and `terra` side by side | ✅ **Done 2026-11-12.** Golden set 3/3 in band. 6 real IAM (Serbia) candidates scored by both models in one throwaway script (nothing written to Lever or disk): **6/6 same band**; `terra` runs ~0.5 higher on the overall score (per-criterion deltas −2…+3, mostly `staff_level_autonomy`). Same-model noise for reference: Sonnet gave 8.1 to a candidate it scored 8.4 in August. Watch candidates within ~0.5 of a band boundary |
+| **T6.6** | Remove `anthropic` from `pyproject.toml`; update README/CONTEXT references; delete the `anthropic-api-key` Keychain entry only on explicit go-ahead | ✅ **Done 2026-11-12** except the Keychain entry (awaiting go-ahead). `anthropic` uninstalled; CONTEXT §4 rewritten for the OpenAI API; `uv run pytest` 58/58; real `lever screen --limit 1` end to end on `gpt-6.1-terra` |
+
+---
+
 # Roadmap
 
 ```
@@ -224,8 +241,8 @@ Full testing at the close of each epic; this document and `CONTEXT.md` get updat
 
 | Need | Choice | Why |
 |---|---|---|
-| Claude | `anthropic` | Native PDF `document` blocks; `messages.parse()` for schema-validated verdicts; prompt caching |
-| Verdict schema | `pydantic` | What `messages.parse()` validates against — the schema *is* the model |
+| LLM | `openai` | Native PDF `input_file`; `responses.parse()` for schema-validated verdicts; `store=False` (ADR-0006, replaced `anthropic` 2026-11-12) |
+| Verdict schema | `pydantic` | What `responses.parse()` validates against — the schema *is* the model |
 | Lever HTTP | `httpx` (async) | Concurrency for the 10 req/s budget |
 | Retries | `tenacity` | Lever's 429 has no `Retry-After`; needs backoff with jitter |
 | Rate limit | `asyncio.Semaphore(10)` | Stdlib; no library needed |
@@ -242,7 +259,7 @@ Full testing at the close of each epic; this document and `CONTEXT.md` get updat
 - **`aiolimiter`** — a semaphore covers it.
 
 `pydantic` is in the list on purpose, having looked like overhead earlier: with
-`messages.parse()` it is the mechanism that guarantees the verdict parses, not a second
+`responses.parse()` it is the mechanism that guarantees the verdict parses, not a second
 validation layer.
 
 ---

@@ -7,18 +7,32 @@ Not a shared service, not a platform. A tool I run.
 
 ## Status
 
-Planning complete, awaiting go-ahead to build. No code yet.
+Epic 0 (bootstrap), Epic 1 (digest), Epic 2 (screening), and Epic 3 (writing back) are done.
+`uv run lever digest` flags stale candidates and unhealthy postings and shows day-over-day
+movement; a `launchd` schedule (Mon–Fri 11:00 MSK) ships in `scripts/` but is not loaded by default (see [docs/SETUP.md](docs/SETUP.md)). `uv run lever screen
+<posting_id>` scores a candidate's resume against the posting's rubric with OpenAI
+(`gpt-6.1-terra` by default — a deliberate cost decision, see
+[ADR-0006](docs/adr/0006-openai-gpt-6-1-terra.md)) and, with `--post-notes`,
+writes the score back to Lever as a note plus a `screened` tag. `lever advance` moves a
+candidate's stage with an interactive confirmation — live-verified with a real round-trip
+move (`New applicant` → `Recruiter Scheduling Interview` → `New applicant`). `lever audit`
+shows the local write history. T0.7 is answered: Thomas Hansen confirmed no vendor
+integration owns "AI Screened" (the `screened.io` hypothesis was ruled out) — it's used
+manually by some HR/hiring managers, so it's now an ordinary stage-move target like any
+other. Every task through Epic 3 is closed. Epic 4 (interview scheduling) is next, if it
+turns out to be worth building at all — its own T4.1 has to check first.
 
-Branch: `feature/lever-automation-agent` · target repo: a new **private** repo under
-[github.com/xsomx1](https://github.com/xsomx1)
+Repo: [github.com/xsomx1/lever-agent](https://github.com/xsomx1/lever-agent) (private) ·
+branch: `feature/lever-automation-agent`
 
 ## Documents
 
 | Document | What it is |
 |---|---|
+| [docs/SETUP.md](docs/SETUP.md) | Installing the agent on another Mac: tooling, keys, checks, the digest schedule |
 | [docs/PLAN.md](docs/PLAN.md) | Epics, tasks, roadmap, dependencies |
 | [docs/CONTEXT.md](docs/CONTEXT.md) | Lever API constraints, live pipeline, prior art, open unknowns |
-| [docs/adr/](docs/adr/) | The four decisions this rests on |
+| [docs/adr/](docs/adr/) | The decisions this rests on |
 
 ## The decisions
 
@@ -26,19 +40,26 @@ Branch: `feature/lever-automation-agent` · target repo: a new **private** repo 
 |---|---|
 | [0001](docs/adr/0001-standalone-personal-agent.md) | A standalone personal CLI, not n8n and not the corporate Cloud Run platform |
 | [0002](docs/adr/0002-human-in-the-loop.md) | Human-in-the-loop on the reject and hire gates |
-| [0003](docs/adr/0003-claude-opus-5-native-pdf.md) | Claude Opus 5 with native PDF input and structured outputs — no text-extraction library |
+| ~~[0003](docs/adr/0003-claude-opus-5-native-pdf.md)~~ | **Superseded by 0006.** Native PDF input and structured outputs — no text-extraction library. Default model amended 2026-08-18 to `claude-sonnet-5` (was Opus 5) as a deliberate cost decision |
 | [0004](docs/adr/0004-local-state-sqlite.md) | Local SQLite for state; no candidate PII persisted |
+| [0005](docs/adr/0005-postings-mine-includes-hiring-manager.md) | "My postings" also includes postings where I'm the hiring manager, not just owner/follower |
+| [0006](docs/adr/0006-openai-gpt-6-1-terra.md) | Screening runs on OpenAI `gpt-6.1-terra` via the Responses API (`store=False`); Anthropic removed |
 
 ## What it will do
 
 **Pipeline hygiene** — stale candidates past a per-stage SLA, postings with no movement,
 published postings that should have been closed. A digest I can read in the morning.
 
-**Screening** — pull the resume PDF for a new applicant on one of my postings, score it
-against that posting's rubric with Claude, and rank. The score goes back into Lever as a
-note; stage moves need my confirmation.
+**Screening** — pull the resume PDF for a candidate on one of my postings, score it against
+that posting's rubric with OpenAI, and rank the cohort (`uv run lever screen <posting_id>`).
+`--post-notes` writes the score back as a Lever note plus a `screened` tag.
 
-**Scoped to my own hiring** — postings where I'm the owner or a follower, not all 185.
+**Writing back** — `lever advance <opportunity_id> <stage>` moves one candidate at a time,
+with an interactive confirmation and `--dry-run` on every write path. No automated rejection,
+hire, or candidate email exists anywhere in this tool (ADR-0002).
+
+**Scoped to my own hiring** — postings where I'm the owner, a follower, or the hiring manager
+(ADR-0005), not all 185.
 
 ## Access
 

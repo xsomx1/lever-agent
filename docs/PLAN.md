@@ -68,17 +68,21 @@ build reaches it.
 
 | Task | Description | Done when |
 |---|---|---|
-| **T0.1** | Create the **private** repo under `xsomx1`, push this planning branch | `gh repo view` shows it private |
-| **T0.2** | Toolchain per the prerequisites table above: pin Python 3.13, then `pyproject.toml` with `anthropic`, `httpx`, `tenacity`, `pydantic`, `typer`, `rich` | `uv run lever --help` works |
-| **T0.3** | Read the Lever key from the Keychain at runtime (`security find-generic-password -a "$USER" -s lever-api-key -w`) — never from the repo, a `.env`, or an env var baked into a script | Client authenticates with no secret on disk |
-| **T0.4** | ✅ **Done 2026-08-18.** Lever user UID is `a245ada8-57eb-4bf7-8354-4635c02627d4` — the standing `perform_as`. Just put it in config | UID in local config |
-| **T0.5** | Identify my postings: `GET /v1/postings` with `expand=owner&expand=followers`, filter to me. `state=published` alone omits internal-jobsite postings — also pass `distributionChannel=public&distributionChannel=internal`. **Do not pass `confidentiality`** (see prerequisites) | The posting set matches what I actually hire for |
-| **T0.6** | Lever client module: async `httpx`, `asyncio.Semaphore(10)` for the 10 req/s limit, `tenacity` retry with jittered backoff (429 carries no `Retry-After`), cursor pagination on `hasNext`/`next`. Write it fresh from the public docs — do **not** copy the internal `lever-deep-sync` client into a personal repo | Paginates all my postings and their opportunities correctly |
-| **T0.7** | Establish what writes to the **"AI Screened"** stage before Epic 3 touches any stage. Likely the `screened.io` marketplace integration — if a vendor owns it, my writes would collide. Check Lever admin → Integrations, or ask Thomas Hansen | Written answer in `CONTEXT.md` §8 |
+| **T0.1** | Create the **private** repo under `xsomx1`, push this planning branch | ✅ **Done 2026-08-18.** `github.com/xsomx1/lever-agent`, private, `feature/lever-automation-agent` pushed |
+| **T0.2** | Toolchain per the prerequisites table above: pin Python 3.13, then `pyproject.toml` with `anthropic`, `httpx`, `tenacity`, `pydantic`, `typer`, `rich` | ✅ **Done 2026-08-18.** `pyproject.toml` + `uv sync`; `uv run lever --help` works |
+| **T0.3** | Read the Lever key from the Keychain at runtime (`security find-generic-password -a "$USER" -s lever-api-key -w`) — never from the repo, a `.env`, or an env var baked into a script | ✅ **Done 2026-08-18.** `src/lever_agent/keychain.py`; verified against a real `GET /v1/postings` call with the key never printed or persisted |
+| **T0.4** | ✅ **Done 2026-08-18.** Lever user UID is `a245ada8-57eb-4bf7-8354-4635c02627d4` — the standing `perform_as`. Just put it in config | ✅ `MY_LEVER_UID` in `src/lever_agent/config.py` |
+| **T0.5** | Identify my postings: `GET /v1/postings` with `expand=owner&expand=followers&expand=hiringManager`, filter to owner/follower/hiring-manager (ADR-0005). `state=published` alone omits internal-jobsite postings — also pass `distributionChannel=public&distributionChannel=internal`. **Do not pass `confidentiality`** (see prerequisites) | ✅ **Done 2026-08-18, extended 2026-08-18 (ADR-0005).** `LeverClient.get_my_postings()` + `uv run lever postings mine` — returns my 3 real postings against production Lever; filter now also catches postings owned by someone else where I'm the hiring manager (none exist today, but the gap is closed) |
+| **T0.6** | Lever client module: async `httpx`, `asyncio.Semaphore(10)` for the 10 req/s limit, `tenacity` retry with jittered backoff (429 carries no `Retry-After`), cursor pagination on `hasNext`/`next`. Write it fresh from the public docs — do **not** copy the internal `lever-deep-sync` client into a personal repo | ✅ **Done 2026-08-18.** `src/lever_agent/lever_client.py`, written fresh from the public docs; unit-tested for pagination, `distributionChannel`, and the `confidentiality` guard |
+| **T0.7** | Establish what writes to the **"AI Screened"** stage before Epic 3 touches any stage. Likely the `screened.io` marketplace integration — if a vendor owns it, my writes would collide. Check Lever admin → Integrations, or ask Thomas Hansen | ✅ **Answered 2026-08-18.** Thomas Hansen: no vendor/marketplace integration owns it (`screened.io` hypothesis ruled out) — used manually by some HR/hiring managers, not by Thomas himself. Written up in `CONTEXT.md` §8; the "AI Screened" hard block in `writes.py` was lifted the same day |
 
 **Testing:** unit tests for cursor pagination and for the `distributionChannel` default. Add a
 guard test asserting the client **never** emits a `confidentiality` parameter — this key 403s on
 it, so a stray one fails the request outright rather than degrading. Nothing more.
+
+**Epic 0 status: fully closed** (T0.7 answered 2026-08-18, see below). `uv run pytest` was
+7/7 green at the time (`tests/test_pagination.py`, `tests/test_distribution_channel.py`,
+`tests/test_confidentiality_guard.py`).
 
 ---
 
@@ -88,13 +92,16 @@ Read-only. Ships first, useful immediately, no risk.
 
 | Task | Description | Done when |
 |---|---|---|
-| **T1.1** | Per-stage SLA config; flag candidates sitting past it. Watermark on the `updated_at_start` filter, never on the `updatedAt` field | Correct flags across all 13 stages |
-| **T1.2** | Posting health: no new applicant in N days, fewer than K active candidates, published longer than a threshold | Flags my stale postings |
-| **T1.3** | Terminal digest via `rich` — grouped by posting, sorted by urgency | One command, readable output |
-| **T1.4** | Schedule it: `launchd` weekday mornings, output to a file I can open (or a Slack DM to myself if I'd rather) | Fires without me remembering |
-| **T1.5** | Store snapshots in SQLite so the digest can show day-over-day movement | Deltas appear on the second run |
+| **T1.1** | Per-stage SLA config; flag candidates sitting past it. Watermark on the `updated_at_start` filter, never on the `updatedAt` field | ✅ **Done 2026-08-18.** `config/pipeline.yaml` + `digest.py::compute_stage_flags`, keyed off `lastAdvancedAt` (verified live to be the reliable stage-entry timestamp — `updatedAt` is not) |
+| **T1.2** | Posting health: no new applicant in N days, fewer than K active candidates, published longer than a threshold | ✅ **Done 2026-08-18.** `digest.py::compute_posting_health`, all three conditions |
+| **T1.3** | Terminal digest via `rich` — grouped by posting, sorted by urgency | ✅ **Done 2026-08-18.** `uv run lever digest` — postings sorted worst-first, candidates by days-over-SLA |
+| **T1.4** | Schedule it: `launchd` weekday mornings, output to a file I can open (or a Slack DM to myself if I'd rather) | ✅ **Done 2026-08-18** (file output only). `lever digest` always writes `~/Library/Logs/lever-agent/digest-<date>.log`. `scripts/com.nzinevich.lever-agent.digest.plist` **installed and loaded** 2026-08-18 (`~/Library/LaunchAgents/`, `launchctl load`), retimed to **Mon–Fri 11:00 MSK** the same day (the Mac's system timezone is Europe/Moscow, so plist local time == MSK) — confirmed via `launchctl print` |
+| **T1.5** | Store snapshots in SQLite so the digest can show day-over-day movement | ✅ **Done 2026-08-18.** `state/lever_agent.db` (gitignored, PII-free per ADR-0004); verified live that deltas surface correctly (stage move, newly-raised flag, posting health change, active-count change) |
 
-**Acceptance:** one week of digests with no false "stale" flags from the `updatedAt` trap.
+**Acceptance:** one week of digests with no false "stale" flags from the `updatedAt` trap — the
+first real run (2026-08-18) surfaced many genuinely-overdue candidates (some 90+ days in
+"New applicant"/"Recruiter Scheduling Interview"), none of which looked like a false positive
+from the `updatedAt` trap. Worth re-checking after a full week per the original criterion.
 
 ---
 
@@ -105,18 +112,27 @@ straight to Claude as a document block, so there is no text-extraction step at a
 
 | Task | Description | Done when |
 |---|---|---|
-| **T2.1** | Rubric per posting: criteria and weights in a small YAML file per posting, versioned in the repo | Rubric for one real posting |
-| **T2.2** | Fetch the resume: `GET /v1/opportunities/:id/resumes`, then `.../download` for the file. Base64 it into a `document` content block. Limits: 32 MB request, 100 pages | Resume reaches Claude intact |
-| **T2.3** | Score with `claude-opus-5` via `client.messages.parse()` against a Pydantic verdict model — per-criterion score, evidence quote, overall recommendation. Structured outputs guarantee it parses | Schema-valid verdict every time |
-| **T2.4** | Cache the rubric and system prompt with `cache_control` (512-token minimum on Opus 5) so screening a cohort pays for the rubric once | `cache_read_input_tokens` non-zero from the second candidate on |
-| **T2.5** | Rank a posting's candidates; show the reasoning behind each score, not just the number | I can review a cohort in one screen |
-| **T2.6** | Keep resume bytes and extracted text **in memory only** — never to disk, logs, or SQLite. Store the score and reasoning, not the PII | Verified by inspection |
+| **T2.1** | Rubric per posting: criteria and weights in a small YAML file per posting, versioned in the repo | ✅ **Done 2026-08-18.** `config/rubrics/f5349e52-94b9-4eb7-aaea-e83b001854a3.yaml` (Staff SWE — IAM, Serbia), 6 criteria drawn from the real JD, weights validated to sum to 1.0 |
+| **T2.2** | Fetch the resume: `GET /v1/opportunities/:id/resumes`, then `.../download` for the file. Base64 it into a `document` content block. Limits: 32 MB request, 100 pages | ✅ **Done 2026-08-18.** Live-verified the `file.downloadUrl` field 403s for this key — the constructed `opportunities/:id/resumes/:resumeId/download` path (as literally described here) works and returns raw PDF bytes; `download_resume_bytes()` in `lever_client.py` uses that path only |
+| **T2.3** | Score with `claude-sonnet-5` (default; amended 2026-08-18, was `claude-opus-5` — see [ADR-0003](adr/0003-claude-opus-5-native-pdf.md)'s amendment) via `client.messages.parse()` against a Pydantic verdict model — per-criterion score, evidence quote, overall recommendation. Structured outputs guarantee it parses | ✅ **Done 2026-08-18.** `screening.py::score_resume()`; verified live against 4 real candidates + a 3-profile golden set — schema-valid every time, `stop_reason` refusal guard in place |
+| **T2.4** | Cache the rubric and system prompt with `cache_control` so screening a cohort pays for the rubric once | ✅ **Done 2026-08-18.** Verified live: `cache_read_input_tokens` was 0 on the first candidate of a fresh cohort, non-zero (1081-3243 across runs) from the second candidate on |
+| **T2.5** | Rank a posting's candidates; show the reasoning behind each score, not just the number | ✅ **Done 2026-08-18.** `uv run lever screen <posting_id>` ranks by computed overall score; `--detail <opportunity_id>` shows the full per-criterion evidence/rationale breakdown |
+| **T2.6** | Keep resume bytes and extracted text **in memory only** — never to disk, logs, or SQLite. Store the score and reasoning, not the PII | ✅ **Done 2026-08-18.** Verified by inspection (no `open`/`.write` in `screening.py` or the new `lever_client.py` methods) and by grepping the repo, `state/lever_agent.db`, and `~/Library/Logs/lever-agent/` after a real screening run — no candidate names anywhere outside Lever itself |
 
-**Cost note:** Opus 5 is $5/M input, $25/M output. Screening is not latency-sensitive, so
-if a cohort is large, the Batches API halves it. Worth wiring only if volume justifies it.
+**Cost note:** Sonnet 5 is the default model as of 2026-08-18 (a deliberate cost decision —
+see ADR-0003's amendment); `lever screen --model claude-opus-5` escalates a specific cohort
+if quality ever demands it ($5/M input, $25/M output). Screening is not latency-sensitive, so
+if a cohort is large, the Batches API halves whichever model is in use. Worth wiring only if
+volume justifies it.
 
 **Testing:** a golden set of a few anonymized profiles with expected score bands, so rubric
 or prompt edits can't silently drift. This is the one place worth real test investment.
+
+**Epic 2 status, 2026-08-18: closed.** `uv run pytest` is 41/41 green (all screening/rubric
+tests run against a mocked Claude client — free, no live calls). `scripts/golden_eval.py`
+(not part of `pytest`, opt-in, real spend) — 3 fabricated synthetic profiles, all landed in
+their expected recommendation band. Anthropic key now lives in the Keychain the same way as
+the Lever key (`security add-generic-password`, service `anthropic-api-key`).
 
 ---
 
@@ -127,12 +143,20 @@ irreversible action stays behind my confirmation.
 
 | Task | Description | Done when |
 |---|---|---|
-| **T3.1** | Post the score to Lever as a note (`POST /v1/opportunities/:id/notes`) with `perform_as` = me. Reversible, low blast radius, immediately useful. Notes created via the API can be edited via the API; notes made in the UI cannot | Score visible on the profile, attributed to me |
-| **T3.2** | Tag screened candidates (`addTags`). Careful: tags are free-text, case-sensitive, and auto-created — a typo makes a new tag. Use a fixed constant | Consistent tag, no strays |
-| **T3.3** | Stage moves (`PUT /v1/opportunities/:id/stage`) only on explicit confirmation, one candidate at a time, never batched, never scheduled. **Do not write to "AI Screened"** until T0.7 settles who owns it | I advance a candidate from the CLI; Lever reflects it |
-| **T3.4** | Local audit log: what changed, when, and the score it was based on. Every write gets a `--dry-run` that logs the intended call without sending it | Dry-run output for every write path |
+| **T3.1** | Post the score to Lever as a note (`POST /v1/opportunities/:id/notes`) with `perform_as` = me. Reversible, low blast radius, immediately useful. Notes created via the API can be edited via the API; notes made in the UI cannot | ✅ **Done 2026-08-18.** `create_note()` in `lever_client.py`, body `{"value": text}` — worked on the first live attempt (no schema iteration needed). `lever screen <posting_id> --post-notes`. One real write made and verified: Omar Khan (`4a6a14de-9981-47ad-9f28-792563515b8c`) |
+| **T3.2** | Tag screened candidates (`addTags`). Careful: tags are free-text, case-sensitive, and auto-created — a typo makes a new tag. Use a fixed constant | ✅ **Done 2026-08-18.** `config.SCREENING_TAG = "screened"`, checked live against `GET /tags` (1000+ existing tags) first — no collision. `add_tags()`, `--tag` / `--post-notes` on `lever screen` |
+| **T3.3** | Stage moves (`PUT /v1/opportunities/:id/stage`) only on explicit confirmation, one candidate at a time, never batched, never scheduled. **Do not write to "AI Screened"** until T0.7 settles who owns it | ✅ **Done 2026-08-18.** `lever advance <opportunity_id> <stage_name> --posting <id>` resolves human-readable stage names via the live `disposition_stages` lookup and prompts an interactive confirmation in real (non-dry-run) mode. **Real live stage move verified**: Omar Khan moved `New applicant` → `Recruiter Scheduling Interview` → `New applicant`, `perform_as` = me both times, Lever's state re-confirmed via a fresh read after each move, both moves in the audit log. The "AI Screened" hard block (in place while T0.7 was open) was **lifted 2026-08-18** once Thomas Hansen answered — "AI Screened" is now an ordinary stage-move target, same discipline as any other |
+| **T3.4** | Local audit log: what changed, when, and the score it was based on. Every write gets a `--dry-run` that logs the intended call without sending it | ✅ **Done 2026-08-18.** `audit_log.py` (`state/lever_agent.db`, PII-free — stage IDs/tag names/scores only), `lever audit` viewer. Verified live: dry-run and real writes both logged correctly, including the blocked AI-Screened attempt (which logs nothing, by design — it never reaches the write functions) |
 
-**Never:** automated rejection, automated hire, or any email to a candidate.
+**Never:** automated rejection, automated hire, or any email to a candidate. No such function
+exists anywhere in `src/lever_agent/writes.py`.
+
+**Epic 3 status, 2026-08-18: fully closed.** All four tasks live-verified against production
+Lever: a real note + `screened` tag on Omar Khan (T3.1/T3.2), a real round-trip stage move
+(`New applicant` → `Recruiter Scheduling Interview` → `New applicant`, T3.3), and every one of
+those writes correctly in the local audit log (T3.4). `uv run pytest` is 53/53 green. T0.7 was
+answered the same day (see T0.7 above and `CONTEXT.md` §8) — the "AI Screened" hard block was
+lifted accordingly.
 
 ---
 
@@ -166,6 +190,23 @@ which is real infrastructure for a personal tool.
 
 ---
 
+# Epic 6 — Migrate screening from Anthropic to OpenAI
+
+Decided 2026-11-12, see [ADR-0006](adr/0006-openai-gpt-6-1-terra.md). Branch
+`feature/openai-provider`. Full replacement, no provider layer; default model `gpt-6.1-terra`.
+
+| Task | Description | Done when |
+|---|---|---|
+| **T6.0** | Prerequisites: branch, OpenAI key in the Keychain (`openai-api-key`, Xsolla corporate org), `openai` SDK, ADR-0006 | ✅ **Done 2026-11-12.** Key verified (`GET /v1/models` 200, `gpt-6.1-terra` available); `openai` 3.49.0; one live `responses.parse` call on a synthetic PDF returned a valid `ScreeningVerdict` with `store=False` |
+| **T6.1** | `config.py` / `keychain.py`: `OPENAI_KEYCHAIN_SERVICE`, `get_openai_api_key()` | ✅ **Done 2026-11-12.** Anthropic key constant and getter removed |
+| **T6.2** | `screening.py`: `responses.parse` with `input_file`, `text_format`, `store=False`; refusal guard on the `refusal` content item; default model `gpt-6.1-terra` | ✅ **Done 2026-11-12.** `score_resume()` signature unchanged apart from the client type and `max_output_tokens`; one live call on a synthetic profile returned the expected band |
+| **T6.3** | `cli.py`: `OpenAI` client, `openai.APIError` in the per-candidate skip, `--model` help, report token usage | ✅ **Done 2026-11-12.** The cohort footer reports input/output tokens instead of cache reads — caching doesn't apply here (ADR-0006) |
+| **T6.4** | `scripts/golden_eval.py` on the OpenAI client; `tests/test_screening.py` mocks moved to `responses.parse`, plus an assert on `store=False` | ✅ **Done 2026-11-12.** `uv run pytest` 58/58 green; no new test files |
+| **T6.5** | Live check: `golden_eval.py` (3 synthetic profiles in band) and real candidates scored by Sonnet 5 and `terra` side by side | ✅ **Done 2026-11-12.** Golden set 3/3 in band. 6 real IAM (Serbia) candidates scored by both models in one throwaway script (nothing written to Lever or disk): **6/6 same band**; `terra` runs ~0.5 higher on the overall score (per-criterion deltas −2…+3, mostly `staff_level_autonomy`). Same-model noise for reference: Sonnet gave 8.1 to a candidate it scored 8.4 in August. Watch candidates within ~0.5 of a band boundary |
+| **T6.6** | Remove `anthropic` from `pyproject.toml`; update README/CONTEXT references; delete the `anthropic-api-key` Keychain entry only on explicit go-ahead | ✅ **Done 2026-11-12** except the Keychain entry (awaiting go-ahead). `anthropic` uninstalled; CONTEXT §4 rewritten for the OpenAI API; `uv run pytest` 58/58; real `lever screen --limit 1` end to end on `gpt-6.1-terra` |
+
+---
+
 # Roadmap
 
 ```
@@ -179,7 +220,7 @@ Wave 4   Write-back       T3.1 … T3.4      ── notes first, stage moves las
          ↓
 Wave 5   Optional         T4.x  T5.x       ── only if they earn their keep
 
-         T0.7  ────────────────────────────── in parallel from day one; gates Wave 4
+         T0.7  ────────────────────────── ✅ answered 2026-08-18 (Thomas Hansen), before Wave 4 closed
 ```
 
 **Digest before screening**, decided 2026-08-18. The two epics are technically independent, but
@@ -189,8 +230,8 @@ data with nothing at risk. Screening then lands on a client that is already know
 rather than debugging both layers at once. It also means Wave 1 and Wave 2 need no Anthropic
 credential, so the build can start before that access is sorted.
 
-T0.7 (who owns the "AI Screened" stage) sits outside the waves because it waits on a person.
-Ask at the start; it only has to be answered before Wave 4.
+T0.7 (who owns the "AI Screened" stage) sat outside the waves because it waited on a person —
+answered 2026-08-18 by Thomas Hansen (no vendor integration owns it), before Wave 4 closed.
 
 Full testing at the close of each epic; this document and `CONTEXT.md` get updated as tasks land.
 
@@ -200,8 +241,8 @@ Full testing at the close of each epic; this document and `CONTEXT.md` get updat
 
 | Need | Choice | Why |
 |---|---|---|
-| Claude | `anthropic` | Native PDF `document` blocks; `messages.parse()` for schema-validated verdicts; prompt caching |
-| Verdict schema | `pydantic` | What `messages.parse()` validates against — the schema *is* the model |
+| LLM | `openai` | Native PDF `input_file`; `responses.parse()` for schema-validated verdicts; `store=False` (ADR-0006, replaced `anthropic` 2026-11-12) |
+| Verdict schema | `pydantic` | What `responses.parse()` validates against — the schema *is* the model |
 | Lever HTTP | `httpx` (async) | Concurrency for the 10 req/s budget |
 | Retries | `tenacity` | Lever's 429 has no `Retry-After`; needs backoff with jitter |
 | Rate limit | `asyncio.Semaphore(10)` | Stdlib; no library needed |
@@ -218,7 +259,7 @@ Full testing at the close of each epic; this document and `CONTEXT.md` get updat
 - **`aiolimiter`** — a semaphore covers it.
 
 `pydantic` is in the list on purpose, having looked like overhead earlier: with
-`messages.parse()` it is the mechanism that guarantees the verdict parses, not a second
+`responses.parse()` it is the mechanism that guarantees the verdict parses, not a second
 validation layer.
 
 ---

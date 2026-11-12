@@ -24,3 +24,6 @@ venv/
 .ruff_cache/
 
 .DS_Store
+
+# Claude Code local settings (per-machine permission overrides) — not shared
+.claude/settings.local.json

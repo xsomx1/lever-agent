@@ -209,49 +209,41 @@ integration partners. No reference to an Xsolla sandbox was found anywhere. **As
 runs against production Lever.**
 
 ---
-## 4. Claude API — what the screening design relies on
+## 4. OpenAI API — what the screening design relies on
 
-Verified against the current API, 2026-08-18.
+Verified against the live API with `openai` 3.49.0, 2026-11-12. Replaces the Claude API
+notes that stood here until then (see [ADR-0006](adr/0006-openai-gpt-6-1-terra.md); the old
+design is in [ADR-0003](adr/0003-claude-opus-5-native-pdf.md)).
 
-**Native PDF input, no beta header.** A resume goes in as a content block placed before the
-text block:
+**Native PDF input** via the Responses API, as an `input_file` part placed before the text:
 
 ```json
-{"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": "<b64>"}}
+{"type": "input_file", "filename": "resume.pdf", "file_data": "data:application/pdf;base64,<b64>"}
 ```
 
-The base64 string must have no newlines. Limits: **32 MB per request, 100 pages** on
-200k-context models. The model reads layout and figures — there is no text-extraction step,
-which is why `pdfplumber` is absent from this design (see [ADR-0003](adr/0003-claude-opus-5-native-pdf.md)).
+Limit: **50 MB per request** (all files combined). For vision-capable models the API sends
+both the extracted text and page images, so there is still no text-extraction step here and
+no `pdfplumber`.
 
-**Structured outputs.** `client.messages.parse()` takes a Pydantic model as `output_format`
-and returns a validated instance — schema conformance is enforced by the API, so no
-parse-retry loop. Schema limits worth knowing: `additionalProperties: false` is required on
-every object; recursive schemas, numeric constraints (`minimum`/`maximum`) and string
-constraints (`minLength`) are unsupported — the Python SDK strips them and validates
-client-side. Incompatible with citations (400). A new schema pays a one-time compilation
-cost, then caches for 24 hours.
+**Structured outputs.** `client.responses.parse(text_format=ScreeningVerdict)` returns a
+validated instance in `response.output_parsed`. A refusal arrives as a `refusal` content
+item inside a `message` output item, not as a parsed verdict — check for it first.
+`output_parsed` is `None` when the response is `incomplete` (e.g. `max_output_tokens` hit).
 
-**Model: `claude-opus-5`.** $5 / $25 per MTok. 1M context, 128K max output. Two behaviours
-that affect the code:
+**Model: `gpt-6.1-terra`** ($1 / $5 per MTok), escalation via `--model gpt-6.1-sol` ($2 / $10)
+or `gpt-6-astra` ($10 / $50). Reasons by default; `max_output_tokens` caps reasoning plus
+the verdict, so it needs headroom.
 
-- **Thinking is on by default** — omitting the `thinking` parameter runs adaptive thinking.
-- **`max_tokens` caps thinking *plus* response text**, so it needs headroom or verdicts
-  truncate mid-object.
-- `temperature`, `top_p`, `top_k` and `budget_tokens` are **rejected with a 400**. Steer with
-  the prompt and with `output_config: {effort: ...}` (`low` … `max`, default `high`).
-- Safety classifiers can return `stop_reason: "refusal"` on an HTTP 200 — check `stop_reason`
-  before reading `content`.
+**`store=False` on every call.** The Responses API stores responses unless told not to;
+ADR-0004 rules that out for candidate data.
 
-**Prompt caching.** Minimum cacheable prefix on Opus 5 is **512 tokens** (half the 1024 of
-Opus 4.8), so a rubric of any substance caches. Render order is `tools` → `system` →
-`messages`; put `cache_control` on the last stable block and keep the per-candidate content
-after it. Verify with `usage.cache_read_input_tokens` — if it stays zero across a cohort,
-something in the prefix is varying per request.
+**Prompt caching is automatic but does not kick in here.** The minimum cacheable prefix is
+1,024 tokens; the only prefix shared across candidates is the rubric prompt (~400 tokens).
+Measured: `usage.input_tokens_details.cached_tokens` stays 0. Not worth padding for at
+`terra` prices.
 
-**Batches API.** 50% cost reduction, up to 100k requests per batch, most complete within an
-hour. Screening is not latency-sensitive, so this is the lever to pull if a cohort ever gets
-large.
+**Batch API** halves the cost if a cohort ever gets large; screening is not
+latency-sensitive.
 
 ---
 
@@ -319,12 +311,16 @@ answers matter when a question comes up.
 
 ## 8. Open unknowns
 
-1. **What writes to the "AI Screened" stage** — the one that could actually cause damage.
-   Hypothesis: `screened.io`, a Lever marketplace product documented in AI1 page 23732617239
-   as syncing postings and resumes out of Lever, evaluating, and **writing the evaluation back
-   to the candidate profile**. The stage name is an exact match, and nothing in
-   `neuronet-automations` or `mini-apps` writes to it. **If a vendor integration owns that
-   stage, anything this agent writes there will collide.** Resolve before Epic 3 (task T0.7).
+1. ~~**What writes to the "AI Screened" stage**~~ — **Answered 2026-08-18 by Thomas Hansen**
+   (Slack DM, asked 2026-08-18): **no vendor/marketplace integration owns this stage.** The
+   `screened.io` hypothesis (a Lever marketplace product documented in AI1 page 23732617239
+   as syncing postings/resumes out of Lever and writing evaluations back) is **ruled out** —
+   Thomas confirmed it isn't connected. The stage is used **manually** by some HR staff and
+   hiring managers; Thomas himself doesn't use it. Consequence: the collision risk this task
+   existed to check was a system/integration one, and there is none — so the hard block on
+   "AI Screened" as a stage-move target in `writes.py::advance_stage` was lifted 2026-08-18.
+   It's now an ordinary stage move like any other, subject to the same one-at-a-time,
+   explicit-confirmation, `--dry-run`-available discipline as every other target.
 2. **No Lever sandbox.** `api.sandbox.lever.co` exists but accounts go only to approved
    integration partners, and no reference to an Xsolla sandbox was found anywhere. **All
    testing runs against production** — hence `--dry-run` on every write path.
